@@ -1,0 +1,795 @@
+---
+title: "Phybion_ShortReads_final"
+author: "Ahmed Hassan"
+output: html_document
+date: "2024-11-04"
+---
+
+#Loading the libraries
+
+```{r}
+
+library("tximeta")
+library("SummarizedExperiment")
+library("org.Hs.eg.db")
+library("macrophage")
+library("DESeq2")
+library("clusterProfiler")
+library("org.Hs.eg.db")
+library("enrichplot")
+library("mosdef")
+library("GeneTonic")
+library("IHW")
+library("gplots")
+library("genefilter")
+library("rtracklayer")
+library("xtable")
+library("GO.db")
+library("goseq")
+library("GenomicFeatures")
+library("ReactomePA")
+library("dplyr")
+library("NMF")
+library("pheatmap")
+library("GOplot")
+library("knitr")
+library("pcaExplorer")
+library("DT")
+library("ideal")
+library("edgeR")
+library("hexbin")
+library("latticeExtra")
+library("vsn")
+library("gplots")
+library("RColorBrewer")
+library("topGO")
+library("BIUMmisc")
+library("biomaRt")
+library("pathview")
+library("VennDiagram")
+library("GSEABase")
+library("msigdbr")
+library("ConsensusClusterPlus")
+library("visNetwork")
+library("igraph")
+library("ggraph")
+library("decoupleR")
+library("OmnipathR")
+library("quantiseqr")
+library("immunedeconv")
+```
+
+#Exploratory Data Analysis (EDA)
+
+```{r}
+
+gse <- readRDS("~/Phybion/gse.RDS")
+
+
+dds<-DESeqDataSet(gse, design= ~Donors+Dose)
+
+dds<- dds[,c( "0Gy-2hrs-F"   ,"0Gy-2hrs-A",   "0Gy-2hrs-S",   "0Gy-6hrs-F"   ,"0Gy-6hrs-A",  
+ "0Gy-6hrs-S"   ,"0.5Gy-2hrs-F" ,"0.5Gy-2hrs-A" ,"0.5Gy-2hrs-S" ,"0.5Gy-6hrs-F",
+ "0.5Gy-6hrs-A" ,"0.5Gy-6hrs-S" ,"1Gy-2hrs-F"   ,"1Gy-2hrs-A"   ,"1Gy-2hrs-S"  ,
+ "1Gy-6hrs-F"   ,"1Gy-6hrs-A"   ,"1Gy-6hrs-S"   ,"2Gy-2hrs-F"   ,"2Gy-2hrs-A"  ,
+ "2Gy-2hrs-S"   ,"2Gy-6hrs-F"   ,"2Gy-6hrs-A"   ,"2Gy-6hrs-S"   ,"4Gy-2hrs-F"  ,
+ "4Gy-2hrs-A"   ,"4Gy-2hrs-S"   ,"4Gy-6hrs-F"   ,"4Gy-6hrs-A"   ,"4Gy-6hrs-S"  )]
+
+dds<-dds_gencode_to_ensembl(dds)
+
+dds_t1<-dds[, dds$Time_point == "2hrs"]
+
+dds_t2<-dds[, dds$Time_point == "6hrs"]
+
+
+## checking read coverage over the samples
+
+
+plot_totcounts(dds, group = "Dose")
+
+
+## PCA plot
+
+pca_plot <- plotPCA(vsd, intgroup = c("Donors", "Time_point"), returnData = TRUE)
+
+ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)) +
+    geom_point(size = 3) +
+     scale_shape_manual(values = c(16, 17)) +  # Adjust the number of shapes if necessary
+     xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+     ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+     theme_minimal()
+
+
+#clustering samples 
+
+sampleDists <- dist(t(assay(vsd)))
+
+sampleDistMatrix <- as.matrix( sampleDists )
+
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+
+
+# Extract time point from sample names
+time_point <- ifelse(grepl("2hrs", colnames(sampleDistMatrix)), "2hrs", "6hrs")
+
+# Extract sex from sample names:
+sex <- ifelse(grepl("F$", colnames(sampleDistMatrix)), "Female", "Male")
+
+# Create a data frame for the column annotation
+column_annotation <- data.frame(Time_Point = time_point, Sex = sex)
+
+# Set row names of annotation to match the column names of sampleDistMatrix
+rownames(column_annotation) <- colnames(sampleDistMatrix)
+
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows = sampleDists,
+         clustering_distance_cols = sampleDists,annotation_col = column_annotation,
+         col = colors)
+
+
+
+#clustering Genes 
+
+topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 30)
+mat  <- assay(vsd)[ topVarGenes, ]
+mat  <- mat - rowMeans(mat)
+anno <- as.data.frame(colData(vsd)[, c("Sex","Time_point", "Donors")])
+genes<-rownames(mat)
+genes <- mapIds(org.Hs.eg.db, keys = genes, column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
+rownames(mat)<- genes
+pheatmap(mat, annotation_col = anno)
+
+```
+
+#Annotations
+
+```{r}
+
+#Annotations for the whole experiment
+
+
+anno_df <- get_annotation_orgdb(dds = dds,
+                                orgdb_species = "org.Hs.eg.db",
+                                idtype = "ENSEMBL")
+
+
+mart <- useMart(biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl")
+
+anns <- getBM(attributes = c("ensembl_gene_id", "external_gene_name", "description"), 
+              filters = "ensembl_gene_id",
+              values = rownames(dds), 
+              mart = mart)
+
+
+```
+
+#Variance stablizing transformation
+
+```{r}
+
+vsd <- vst(dds)
+vsd_t1 <- vst(dds_t1)
+vsd_t2 <- vst(dds_t2)
+
+
+vsd_corrected <- vsd
+assay(vsd_corrected) <- limma::removeBatchEffect(assay(vsd), batch = vsd$Donors)
+
+vsd_t1_corrected <- vsd_t1
+assay(vsd_t1_corrected) <- limma::removeBatchEffect(assay(vsd_t1), batch = vsd_t1$Donors)
+
+vsd_t2_corrected <- vsd_t2
+assay(vsd_t2_corrected) <- limma::removeBatchEffect(assay(vsd_t2), batch = vsd_t2$Donors)
+```
+
+#Differential expression analysis
+
+###Merging all DEA into one big list
+
+```{r}
+#Time point1
+
+
+extended_anno <- fortify_annotations(anno_df_1 = anno_df,
+                                     anno_df_2 = anns,
+                                     dds = dds)
+
+
+# All doses VS 0 Gy comparison
+
+dds_t1$Dose <- relevel(dds_t1$Dose, "0Gy")
+
+dds_t1<- DESeq(dds_t1)
+
+resultsNames(dds_t1)
+
+
+resuSet <- 
+  create_DEresults(resuSet = NULL,
+                   dds_obj = dds_t1,
+                   contrast_name = "Dose_4Gy_vs_0Gy", 
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                   name_res_entry = "t1_4Gy_vs_0Gy")
+
+resuSet <- 
+  create_DEresults(resuSet =resuSet,
+                   dds_obj = dds_t1,
+                   contrast_name = "Dose_2Gy_vs_0Gy", 
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                   name_res_entry = "t1_2Gy_vs_0Gy"
+                   )
+
+
+resuSet <- 
+  create_DEresults(resuSet =resuSet,
+                   dds_obj = dds_t1,
+                   contrast_name = "Dose_0.5Gy_vs_0Gy", 
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                   name_res_entry = "t1_0.5Gy_vs_0Gy"
+                   )
+
+
+
+resuSet <- 
+  create_DEresults(resuSet = resuSet,
+                   dds_obj = dds_t1,
+                   contrast_name = "Dose_1Gy_vs_0Gy", 
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                   name_res_entry = "t1_1Gy_vs_0Gy")
+
+
+
+#Time point2
+
+
+# All doses VS 0 Gy comparison
+
+dds_t2$Dose <- relevel(dds_t2$Dose, "0Gy")
+
+dds_t2<- DESeq(dds_t2)
+
+resultsNames(dds_t2)
+
+
+
+resuSet <- 
+  create_DEresults(resuSet = resuSet,
+                   dds_obj = dds_t2,
+                   contrast_name = "Dose_4Gy_vs_0Gy", 
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                  name_res_entry = "t2_4Gy_vs_0Gy")
+
+resuSet <- 
+  create_DEresults(resuSet = resuSet,
+                   dds_obj = dds_t2,
+                   contrast_name = "Dose_2Gy_vs_0Gy", 
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                   name_res_entry = "t2_2Gy_vs_0Gy"
+                   )
+
+resuSet <- 
+  create_DEresults(resuSet = resuSet,
+                   dds_obj = dds_t2,
+                   contrast_name = "Dose_1Gy_vs_0Gy", 
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                   name_res_entry = "t2_1Gy_vs_0Gy")
+                   
+
+resuSet <- 
+  create_DEresults(resuSet = resuSet,
+                   dds_obj = dds_t2,
+                   contrast_name = "Dose_0.5Gy_vs_0Gy",
+                   FDR = 0.05,
+                   extended_anno_df = extended_anno$anno_df,
+                   species = "Homo_sapiens",
+                   name_res_entry = "t2_0.5Gy_vs_0Gy"
+                   )
+
+
+```
+
+###since we spotted time effect on non-irradiated samples, DEA to capture radiation-only late effect would be as such
+
+```{r}
+dds$Dose <- factor(dds$Dose)
+
+dds$Dose <- relevel(dds$Dose, ref = "0Gy")
+
+dds$Time_point <- factor(dds$Time_point)
+
+dds$Time_point <- relevel(dds$Time_point, ref = "2hrs")
+
+design(dds) <- ~ Donors + Time_point + Dose + Time_point:Dose
+
+dds <- DESeq(dds)
+
+resultsNames(dds)
+
+
+#4Gy t2 Vs 4Gy t1
+
+res_4Gy_time2_vs_time1 <- results(dds, name = "Time_point6hrs.Dose4Gy", test="Wald")
+
+res_shrink_4Gy_time2_vs_time1<- lfcShrink(dds, res = res_4Gy_time2_vs_time1, coef = "Time_point6hrs.Dose4Gy", type="apeglm")
+
+summary(res_shrink_4Gy_time2_vs_time1)
+
+res_shrink_4Gy_time2_vs_time1<- deresult_to_df(res_shrink_4Gy_time2_vs_time1, FDR = 0.05)
+
+genes<- rownames(res_shrink_4Gy_time2_vs_time1)
+genes <- mapIds(org.Hs.eg.db, keys = genes, column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
+rownames(res_shrink_4Gy_time2_vs_time1)<- genes
+
+```
+
+#Functional Enrichment Analysis
+
+```{r}
+expressedInAssay <- (rowSums(assay(dds))>0)
+geneUniverseExprENS <- rownames(dds)[expressedInAssay]
+geneUniverseExpr <- anno_df$gene_name[match(geneUniverseExprENS, anno_df$gene_id)]
+
+```
+
+###Enrichment with ClusterProfiler
+
+```{r}
+
+    # Enrichment with clusterProfiler
+    for(i in names(resuSet)) {
+        message(i)
+        if(nrow(resuSet[[i]][["tbl_res_DE"]]) > 0) {
+            resuSet[[i]][["clupro_tbl"]] <- enrichGO(
+                gene = resuSet[[i]][["tbl_res_DE"]]$gene_name,
+                universe = geneUniverseExpr,
+                keyType = "SYMBOL",
+                OrgDb = org.Hs.eg.db,
+                ont = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff = 0.01,
+                qvalueCutoff = 0.05,
+                readable = FALSE
+            )
+        }
+    }
+
+
+```
+
+###Creating GeneTonic objects
+
+```{r}
+gtl_t1_0.5Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t1_0.5Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t1_0.5Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+gtl_t1_1Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t1_1Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t1_1Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+gtl_t1_2Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t1_2Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t1_2Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+gtl_t1_4Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t1_4Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t1_4Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+gtl_t2_0.5Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t2_0.5Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t2_0.5Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+gtl_t2_1Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t2_1Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t2_1Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+gtl_t2_2Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t2_2Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t2_2Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+gtl_t2_4Gy <- GeneTonicList(
+    dds = dds,
+    res_de = resuSet$t2_4Gy_vs_0Gy$res_DESeq,
+    res_enrich = shake_enrichResult(resuSet$t2_4Gy_vs_0Gy$clupro_tbl),
+    annotation_obj = anno_df)
+
+
+GeneTonic( gtl= gtl_t1_4Gy)
+
+```
+
+###GeneTonic example plots
+
+```{r}
+
+# GeneTonic Pathway-associated DEGs Heatmap
+
+gs_heatmap(se = vsd_corrected, 
+           gtl = gtl_5,
+           geneset_id = "GO:0008630", anno_col_info =  c("Dose", "Time_point", "Sex"), cluster_columns = FALSE)
+
+
+
+# GeneTonic Geneset Heatmap t1_0.5Gy_vs_0Gy
+
+scored_mat_t1_0.5Gy_vs_0Gy<-GeneTonic::gs_scores(se = vsd_corrected,gtl = gtl_t1_0.5Gy)
+
+GeneTonic::gs_scoresheat(scored_mat_t1_0.5Gy_vs_0Gy, n_gs = 20, cluster_cols = FALSE)
+
+
+```
+
+###GSEA
+
+```{r}
+
+significant_genes<- resuSet$t2_4Gy_vs_0Gy$tbl_res_all %>%
+  as.data.frame() %>%
+  filter(padj <=0.05, abs(log2FoldChange) >= 1) %>% 
+  rownames()
+
+significant_genes
+
+
+#convert gene symbol to Entrez ID
+
+significant_genes_map<- clusterProfiler::bitr(geneID = significant_genes,
+                      fromType="ENSEMBL", toType="ENTREZID",
+                      OrgDb="org.Hs.eg.db")
+
+
+## background genes
+background_genes<- resuSet$t2_4Gy_vs_0Gy$tbl_res_all %>% 
+  as.data.frame() %>% 
+  filter(baseMean != 0) %>%
+  tibble::rownames_to_column(var = "gene") %>%
+  pull(gene)
+
+
+res_df<- resuSet$t2_4Gy_vs_0Gy$tbl_res_all %>% 
+  as.data.frame() %>% 
+  filter(baseMean != 0) %>%
+  tibble::rownames_to_column(var = "gene")
+
+background_genes_map<- bitr(geneID = background_genes, 
+                            fromType="ENSEMBL", 
+                            toType="ENTREZID",
+                      OrgDb="org.Hs.eg.db")
+
+
+m_df <- msigdbr(species = "Homo sapiens")
+
+head(m_df)
+
+m_t2g <- msigdbr(species = "Homo sapiens", category = "H") %>% 
+  dplyr::select(gs_name, entrez_gene)
+
+
+table(m_t2g$gs_name)
+head(m_t2g)
+
+em <- enricher(significant_genes_map$ENTREZID, TERM2GENE=m_t2g, 
+               universe = background_genes_map$ENTREZID )
+head(em)
+
+
+### Gene set enrichment analysis
+
+## rank all the genes by signed fold change * -log10pvalue.
+
+res_df<- res_df %>% 
+  mutate(signed_rank_stats = sign(log2FoldChange) * -log10(pvalue)) %>%
+  left_join(background_genes_map, by= c("gene" = "ENSEMBL")) %>%
+  arrange(desc(signed_rank_stats))
+
+gene_list<- res_df$signed_rank_stats
+names(gene_list)<- res_df$ENTREZID
+
+em2 <- GSEA(gene_list, TERM2GENE=m_t2g)
+
+gene_list<- res_df$signed_rank_stats
+names(gene_list)<- res_df$ENTREZID
+
+
+em2 <- GSEA(gene_list, TERM2GENE=m_t2g)
+head(em2)
+
+em2@result %>% View()
+
+### visualization 
+
+p1<- gseaplot(em2, geneSetID = "HALLMARK_TNFA_SIGNALING_VIA_NFKB", 
+              by = "runningScore", title = "HALLMARK_TNFA_SIGNALING_VIA_NFKB")
+
+p2 <- gseaplot(em2, geneSetID = "HALLMARK_INFLAMMATORY_RESPONSE", 
+               by = "runningScore", title = "HALLMARK_INFLAMMATORY_RESPONSE")
+
+p1/p2
+
+```
+
+#Gene Set Variation Analysis
+
+```{r}
+
+exprs_mat<-assay(vsd)
+
+genes<-rownames(exprs_mat)
+
+genes <- mapIds(org.Hs.eg.db, keys = genes, column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
+
+rownames(exprs_mat)<-genes
+
+
+goannot <- select(org.Hs.eg.db, keys=keys(org.Hs.eg.db, "SYMBOL"), columns="GO", keytype="SYMBOL")
+
+genesbygo <- split(goannot$SYMBOL, goannot$GO)
+
+gs.msdb<- getGmt("c2.cp.v2024.1.Hs.symbols.gmt", geneIdType= GenenameIdentifier(), collectionType = BroadCollection("c2"))
+
+
+huangPar <- gsvaParam(exprs_mat,genesbygo ,minSize=5, maxSize=500)
+
+esmicro <- gsva(huangPar)
+
+#Applying Limma on GSVA matrix
+
+#creating metadata
+
+patient<- rep(c("p1","p2","p3"),10)
+dose<-c(rep("0Gy",6), rep("0.5Gy",6),rep("1Gy",6),rep("2Gy",6),rep("4Gy",6))
+time <- rep(c(rep("2hrs", 3), rep("6hrs", 3)), 5)
+metadata<-data.frame(patient,dose,time)
+
+
+f<-factor(paste(metadata$dose,metadata$time,sep="_"))
+
+design<-model.matrix(~0+f)
+
+patient<-as.factor(metadata$patient)
+
+corfit<-duplicateCorrelation(gsva_matrix,design,block=patient)
+
+fit <- lmFit(gsva_matrix,design,block=patient,correlation=corfit$consensus)
+
+contrast.matrix <- makeContrasts(f4Gy_6hrs-f0Gy_6hrs,levels=design)
+
+fit2 <- contrasts.fit(fit, contrast.matrix)
+
+fit2 <- eBayes(fit2)
+
+results_gsva<-topTable(fit2,coef=1,number=nrow(gsva_matrix), adjust="BH")
+
+head(results_gsva, 3)
+
+results_f_gsva <- decideTests(fit2, p.value=0.05)
+
+summary(results_f_gsva)
+
+```
+
+#DecoupleR-- Transcription Factors inference
+
+```{r}
+
+decoupler_counts<- assay(vsd)
+decoupler_genes<- rownames(decoupler_counts)
+decoupler_genes<-mapIds(org.Hs.eg.db, keys = decoupler_genes, column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
+rownames(decoupler_counts)<- decoupler_genes
+
+
+
+res_t1_0.5Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t1_0.5Gy_vs_0Gy)<- res_t1_0.5Gy_vs_0Gy$SYMBOL
+
+res_t1_1Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t1_1Gy_vs_0Gy)<- res_t1_1Gy_vs_0Gy$SYMBOL
+
+res_t1_2Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t1_2Gy_vs_0Gy)<- res_t1_2Gy_vs_0Gy$SYMBOL
+
+res_t1_4Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t1_4Gy_vs_0Gy)<- res_t1_4Gy_vs_0Gy$SYMBOL
+
+res_t2_0.5Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t2_0.5Gy_vs_0Gy)<- res_t2_0.5Gy_vs_0Gy$SYMBOL
+
+res_t2_1Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t2_1Gy_vs_0Gy)<- res_t2_1Gy_vs_0Gy$SYMBOL
+
+res_t2_2Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t2_2Gy_vs_0Gy)<- res_t2_2Gy_vs_0Gy$SYMBOL
+
+res_t2_4Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
+
+rownames(res_t2_4Gy_vs_0Gy)<- res_t2_4Gy_vs_0Gy$SYMBOL
+
+
+#performing the analysis
+
+net <- get_collectri(organism='human', split_complexes=FALSE)
+
+sample_acts_t1_0.5Gy <- run_ulm(mat=res_t1_0.5Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+sample_acts_t1_1Gy <- run_ulm(mat=res_t1_1Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+
+sample_acts_t1_2Gy <- run_ulm(mat=res_t1_2Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+
+sample_acts_t1_4Gy <- run_ulm(mat=res_t1_4Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+
+sample_acts_t2_0.5Gy <- run_ulm(mat=res_t2_0.5Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+
+sample_acts_t2_1Gy <- run_ulm(mat=res_t2_1Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+
+sample_acts_t2_2Gy <- run_ulm(mat=res_t2_2Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+
+sample_acts_t2_4Gy <- run_ulm(mat=res_t2_4Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
+
+
+# Filter top TFs in both signs
+
+n_tfs <- 25
+
+f_sample_acts <- sample_acts_t2_0.5Gy %>%
+  mutate(rnk = NA)
+
+msk <- f_sample_acts$score > 0
+
+f_sample_acts[msk, 'rnk'] <- rank(-f_sample_acts[msk, 'score'])
+
+f_sample_acts[!msk, 'rnk'] <- rank(-abs(f_sample_acts[!msk, 'score']))
+
+tfs <- f_sample_acts %>%
+  arrange(rnk) %>%
+  head(n_tfs) %>%
+  pull(source)
+
+f_sample_acts <- f_sample_acts %>%
+  filter(source %in% tfs)
+
+# Plot
+colors <- rev(RColorBrewer::brewer.pal(n = 11, name = "RdBu")[c(2, 10)])
+
+ggplot(f_sample_acts, aes(x = reorder(source, score), y = score)) + 
+    geom_bar(aes(fill = score), stat = "identity") +
+    scale_fill_gradient2(low = "darkblue", high = "indianred", 
+        mid = "whitesmoke", midpoint = 0) + 
+    theme_minimal() +
+    theme(axis.title = element_text(face = "bold", size = 12),
+        axis.text.x = 
+            element_text(angle = 45, hjust = 1, size =10, face= "bold"),
+        axis.text.y = element_text(size =10, face= "bold"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+    xlab("TFs")
+
+
+#pheatmap
+
+sample_acts <- run_ulm(mat=decoupler_counts, net=net, .source='source', .target='target',.mor='mor', minsize = 5)
+
+
+# Transform to wide matrix
+sample_acts_mat <- sample_acts %>%
+  pivot_wider(id_cols = 'condition', names_from = 'source',
+              values_from = 'score') %>%
+  column_to_rownames('condition') %>%
+  as.matrix()
+
+# Get top tfs with more variable means across clusters
+tfs <- sample_acts %>%
+  group_by(source) %>%
+  summarise(std = sd(score)) %>%
+  arrange(-abs(std)) %>%
+  head(50) %>%
+  pull(source)
+sample_acts_mat <- sample_acts_mat[,tfs]
+
+# Scale per sample
+sample_acts_mat <- scale(sample_acts_mat)
+
+# Choose color palette
+palette_length = 100
+my_color = colorRampPalette(c("Darkblue", "white","red"))(palette_length)
+
+my_breaks <- c(seq(-3, 0, length.out=ceiling(palette_length/2) + 1),
+               seq(0.05, 3, length.out=floor(palette_length/2)))
+
+# Plot
+pheatmap(t(sample_acts_mat), border_color = NA, color=my_color, breaks = my_breaks, annotation_col = column_annotation,cluster_cols = TRUE) 
+
+```
+
+#Deconvolution-- immune cells relative abundance
+
+```{r}
+
+# QuantiseqR
+
+tpm_mat<- assay(dds, "abundance")
+tpm_mat <- tpm_mat[rowSums(tpm_mat) != 0, ]
+
+ti_racle <- quantiseqr::run_quantiseq(
+  expression_data = tpm_mat,
+  signature_matrix = "TIL10",
+  is_arraydata = FALSE,
+  is_tumordata = TRUE,
+  scale_mRNA = TRUE
+)
+
+quantiplot(ti_racle)
+
+pheatmap(t(ti_racle_mat_ordered[,-1])- rowMeans(t(ti_racle_mat_ordered[,-1])), cluster_cols = FALSE)
+
+
+#immunedeconv with Abis method
+
+res_abis<- immunedeconv::deconvolute(gene_expression = tpm_mat, method = "abis")
+
+res_abis_matrix <- as.matrix(res_abis)
+
+rownames(res_abis_matrix) <- res_abis_matrix[,1]
+
+res_abis_matrix <- res_abis_matrix[,-1]
+
+rows_res_abis<- rownames(res_abis_matrix)
+
+res_abis_matrix <- apply(res_abis_matrix, 2, as.numeric)
+
+rownames(res_abis_matrix) <- rows_res_abis
+
+pheatmap(res_abis_matrix_ordered - rowMeans(res_abis_matrix_ordered), cluster_cols = FALSE)
+
+
+#Omnideconv (in Docker) and CIBERSORTx (in web-based tool) were also performed
+
+```
+
+# Session information
+
+```{r sessioninfo}
+sessionInfo()
+```
+
+
