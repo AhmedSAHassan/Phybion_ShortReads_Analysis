@@ -781,8 +781,86 @@ rownames(res_abis_matrix) <- rows_res_abis
 
 pheatmap(res_abis_matrix_ordered - rowMeans(res_abis_matrix_ordered), cluster_cols = FALSE)
 
+#Omnideconv
 
-#Omnideconv (in Docker) and CIBERSORTx (in web-based tool) were also performed
+#preparing the bulk matrix
+
+genes<-rownames(counts(dds))
+
+bulk_mat<- counts(dds)
+
+bulk_genes <- mapIds(org.Hs.eg.db, keys = genes, column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
+
+rownames(bulk_mat)<- bulk_genes
+
+
+#prepare the single cell matrix
+
+is_outlier <- function(SeuratObject, metric, nmads){
+  eval(parse(text = paste0("M <- SeuratObject$",metric)))
+  outlier <- (M < median(M) - nmads * mad(M)) | (M > median(M) + nmads * mad(M))
+  return(outlier)
+}
+
+
+mito_genes <- grep("^MT-", rownames(seurat_obj@assays$SCT@counts), value = TRUE)
+
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, features = mito.genes)
+
+#Filtering
+
+check_outliers_nFeature <- is_outlier(seurat_obj, 'nFeature_RNA', 5)
+check_outliers_nCount <- is_outlier(seurat_obj, 'nCount_RNA', 5)
+check_outliers_mito <- is_outlier(seurat_obj, 'percent.mt', 3)
+
+
+non_outliers_nFeature <- names(check_outliers_nFeature[!check_outliers_nFeature])
+non_outliers_nCount <- names(check_outliers_nCount[!check_outliers_nCount])
+non_outliers_mito <- names(check_outliers_mito[!check_outliers_mito])
+
+non_outliers <- intersect(non_outliers_nFeature, non_outliers_nCount) 
+%>% intersect(non_outliers_mito) 
+
+seurat_obj <- subset(seurat_obj, cells = non_outliers)
+
+
+View(as.data.frame(table(seurat_obj$free_annotation, dnn = list("celltype_major")), responseName = "number_cells"))
+
+
+
+sampled.metadata <- seurat_obj@meta.data %>%
+      rownames_to_column(., 'barcode') %>%
+      group_by(., free_annotation) %>% 
+      nest() %>%            
+      dplyr::mutate(n =  map_dbl(data, nrow)) %>%
+      dplyr::mutate(n = min(n, 500)) %>%
+      ungroup() %>% 
+      dplyr::mutate(samp = map2(data, n, sample_n)) %>% 
+      dplyr::select(-data) %>%
+      unnest(samp)
+
+single.cell.data.sampled <- subset(seurat_obj, cells = sampled.metadata$barcode)
+
+sampled.metadata<-sampled.metadata[!sampled.metadata$free_annotation %in% c("erythrocyte", "granulocyte", "hematopoietic stem cell", "myeloid progenitor", "non-classical monocyte", "plasmablast", "plasmacytoid dendritic cell"), ]
+
+
+count_matrix <- GetAssayData(single.cell.data.sampled, layer= "counts")
+
+
+#running omnideconv-bayesprism
+
+deconv_bayesprism<- deconvolute(bulk_gene_expression = bulk_mat,
+                                           single_cell_object = sc_blood_modified,
+                                           cell_type_annotations = Blood_annotation_modified,
+                                           method = 'bayesprism', 
+                                           n_cores=12)
+
+omnideconv::plot_deconvolution(list('bayesprism' = deconv_bayesprism), "bar", "method", "Spectral")
+
+pheatmap(t(deconv_bayesprism)- rowMeans(t(deconv_bayesprism)))
+
+
+CIBERSORTx (in web-based tool) was also performed
 
 ```
 
