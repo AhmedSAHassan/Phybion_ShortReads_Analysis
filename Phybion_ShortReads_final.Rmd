@@ -59,38 +59,53 @@ library("quantiseqr")
 library("immunedeconv")
 ```
 
-#Exploratory Data Analysis (EDA)
+<!-- FMsays: use spaces also in the header names, it looks tidyer/in some case it is otherwise failing if no space is in- same goes for some newlines -->
+
+# Exploratory Data Analysis (EDA)
 
 ```{r}
+## FMsays: always try to NOT use absolute paths but only relative ones. since you are already in the folder where gse.RDS is, go with... (ok, that thing is not there now, but then put it in there)
+# gse <- readRDS("~/Phybion/gse.RDS")
+gse <- readRDS("gse.RDS")
+## FMsays: call this thing gse_phybion_sr?
 
-gse <- readRDS("~/Phybion/gse.RDS")
 
+## FMsays: go with spaces between words and things - one round on this with styler can fix it
+# dds<-DESeqDataSet(gse, design= ~Donors+Dose)
+dds <- DESeqDataSet(gse, design= ~Donors + Dose)
 
-dds<-DESeqDataSet(gse, design= ~Donors+Dose)
-
-dds<- dds[,c( "0Gy-2hrs-F"   ,"0Gy-2hrs-A",   "0Gy-2hrs-S",   "0Gy-6hrs-F"   ,"0Gy-6hrs-A",  
+dds <- dds[,c( "0Gy-2hrs-F"   ,"0Gy-2hrs-A",   "0Gy-2hrs-S",   "0Gy-6hrs-F"   ,"0Gy-6hrs-A",  
  "0Gy-6hrs-S"   ,"0.5Gy-2hrs-F" ,"0.5Gy-2hrs-A" ,"0.5Gy-2hrs-S" ,"0.5Gy-6hrs-F",
  "0.5Gy-6hrs-A" ,"0.5Gy-6hrs-S" ,"1Gy-2hrs-F"   ,"1Gy-2hrs-A"   ,"1Gy-2hrs-S"  ,
  "1Gy-6hrs-F"   ,"1Gy-6hrs-A"   ,"1Gy-6hrs-S"   ,"2Gy-2hrs-F"   ,"2Gy-2hrs-A"  ,
  "2Gy-2hrs-S"   ,"2Gy-6hrs-F"   ,"2Gy-6hrs-A"   ,"2Gy-6hrs-S"   ,"4Gy-2hrs-F"  ,
  "4Gy-2hrs-A"   ,"4Gy-2hrs-S"   ,"4Gy-6hrs-F"   ,"4Gy-6hrs-A"   ,"4Gy-6hrs-S"  )]
 
-dds<-dds_gencode_to_ensembl(dds)
+dds <- dds_gencode_to_ensembl(dds)
 
-dds_t1<-dds[, dds$Time_point == "2hrs"]
+dds_t1 <- dds[, dds$Time_point == "2hrs"]
 
-dds_t2<-dds[, dds$Time_point == "6hrs"]
+dds_t2 <- dds[, dds$Time_point == "6hrs"]
+
+## FMsays: I am stopping here to change it by hand, go with automated tools
 
 
 ## checking read coverage over the samples
 
 
 plot_totcounts(dds, group = "Dose")
+## FMsays: you can also have this a bit redundant but also split up by other variables, would not hurt
+plot_totcounts(dds, group = "Donors")
+plot_totcounts(dds, group = "Time_point")
 
+## FMsays: missing the part where you obtain the vsd object
+vsd <- vst(dds)
+## FMsays: while at it, call it also vsd_phybion or something more specific?
 
 ## PCA plot
 
 pca_plot <- plotPCA(vsd, intgroup = c("Donors", "Time_point"), returnData = TRUE)
+## FMsays: need to calculate percentVar somewhere first
 
 ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)) +
     geom_point(size = 3) +
@@ -114,6 +129,11 @@ time_point <- ifelse(grepl("2hrs", colnames(sampleDistMatrix)), "2hrs", "6hrs")
 
 # Extract sex from sample names:
 sex <- ifelse(grepl("F$", colnames(sampleDistMatrix)), "Female", "Male")
+
+## FMsays: could be clever to embed these things as covariates in the colData
+dds$Time_point
+dds$Sex
+## FMsays: (and you actually do that)
 
 # Create a data frame for the column annotation
 column_annotation <- data.frame(Time_Point = time_point, Sex = sex)
@@ -141,7 +161,7 @@ pheatmap(mat, annotation_col = anno)
 
 ```
 
-#Annotations
+# Annotations
 
 ```{r}
 
@@ -163,7 +183,7 @@ anns <- getBM(attributes = c("ensembl_gene_id", "external_gene_name", "descripti
 
 ```
 
-#Variance stablizing transformation
+# Variance stabilizing transformation
 
 ```{r}
 
@@ -305,6 +325,9 @@ resuSet <-
 ###since we spotted time effect on non-irradiated samples, DEA to capture radiation-only late effect would be as such
 
 ```{r}
+
+# FMsays: we could and should do these operations of refactoring and level processing at the beginning
+# FMsays: keep in mind it might change the reference levels
 dds$Dose <- factor(dds$Dose)
 
 dds$Dose <- relevel(dds$Dose, ref = "0Gy")
@@ -330,9 +353,17 @@ summary(res_shrink_4Gy_time2_vs_time1)
 
 res_shrink_4Gy_time2_vs_time1<- deresult_to_df(res_shrink_4Gy_time2_vs_time1, FDR = 0.05)
 
+# FMsays: I would probably never rename the rows fully but rather add the symbol in an extra column. Why? you don't want duplicate names or NAs
 genes<- rownames(res_shrink_4Gy_time2_vs_time1)
 genes <- mapIds(org.Hs.eg.db, keys = genes, column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
 rownames(res_shrink_4Gy_time2_vs_time1)<- genes
+
+# FMsays: and indeed you cannot change it
+# > rownames(res_shrink_4Gy_time2_vs_time1)<- genes
+# Error in `.rowNamesDF<-`(x, value = value) : 
+#   duplicate 'row.names' are not allowed
+# In addition: Warning message:
+# non-unique values when setting 'row.names':  
 
 ```
 
@@ -349,23 +380,25 @@ geneUniverseExpr <- anno_df$gene_name[match(geneUniverseExprENS, anno_df$gene_id
 
 ```{r}
 
-    # Enrichment with clusterProfiler
-    for(i in names(resuSet)) {
-        message(i)
-        if(nrow(resuSet[[i]][["tbl_res_DE"]]) > 0) {
-            resuSet[[i]][["clupro_tbl"]] <- enrichGO(
-                gene = resuSet[[i]][["tbl_res_DE"]]$gene_name,
-                universe = geneUniverseExpr,
-                keyType = "SYMBOL",
-                OrgDb = org.Hs.eg.db,
-                ont = "BP",
-                pAdjustMethod = "BH",
-                pvalueCutoff = 0.01,
-                qvalueCutoff = 0.05,
-                readable = FALSE
-            )
-        }
-    }
+# FMsays: we can probably use mosdef's wrapper here?
+
+# Enrichment with clusterProfiler
+for(i in names(resuSet)) {
+  message(i)
+  if(nrow(resuSet[[i]][["tbl_res_DE"]]) > 0) {
+    resuSet[[i]][["clupro_tbl"]] <- enrichGO(
+      gene = resuSet[[i]][["tbl_res_DE"]]$gene_name,
+      universe = geneUniverseExpr,
+      keyType = "SYMBOL",
+      OrgDb = org.Hs.eg.db,
+      ont = "BP",
+      pAdjustMethod = "BH",
+      pvalueCutoff = 0.01,
+      qvalueCutoff = 0.05,
+      readable = FALSE
+    )
+  }
+}
 
 
 ```
@@ -421,20 +454,26 @@ gtl_t2_4Gy <- GeneTonicList(
     res_enrich = shake_enrichResult(resuSet$t2_4Gy_vs_0Gy$clupro_tbl),
     annotation_obj = anno_df)
 
-
-GeneTonic( gtl= gtl_t1_4Gy)
+# FMsays: keep this unevaluated in a separate chunk, so that it does not interrupt the rendering ;)
+GeneTonic(gtl = gtl_t1_4Gy)
 
 ```
 
 ###GeneTonic example plots
+
+FMsays: feel free to add more text around the chunks. It makes it feel more like you tell what is happening, and that can only be good!
 
 ```{r}
 
 # GeneTonic Pathway-associated DEGs Heatmap
 
 gs_heatmap(se = vsd_corrected, 
-           gtl = gtl_5,
-           geneset_id = "GO:0008630", anno_col_info =  c("Dose", "Time_point", "Sex"), cluster_columns = FALSE)
+           gtl = gtl_t1_0.5Gy,
+           # FMsays: gtl_5 not existing here so far?
+           geneset_id = "GO:0008630", 
+           anno_col_info =  c("Dose", "Time_point", "Sex"), 
+           # FMsays: go to newlines and let code breathe a bit more
+           cluster_columns = FALSE)
 
 
 
@@ -451,6 +490,8 @@ GeneTonic::gs_scoresheat(scored_mat_t1_0.5Gy_vs_0Gy, n_gs = 20, cluster_cols = F
 
 ```{r}
 
+# FMsays: we could and probably should use the fgsea implementation here - might need some rework but it might look better and be faster
+
 significant_genes<- resuSet$t2_4Gy_vs_0Gy$tbl_res_all %>%
   as.data.frame() %>%
   filter(padj <=0.05, abs(log2FoldChange) >= 1) %>% 
@@ -458,6 +499,7 @@ significant_genes<- resuSet$t2_4Gy_vs_0Gy$tbl_res_all %>%
 
 significant_genes
 
+# FMsays: careful, gsea uses ALL genes, not only the signif ones. plus: do not filter post hoc on logFC values, see few lines above
 
 #convert gene symbol to Entrez ID
 
@@ -553,6 +595,7 @@ goannot <- select(org.Hs.eg.db, keys=keys(org.Hs.eg.db, "SYMBOL"), columns="GO",
 
 genesbygo <- split(goannot$SYMBOL, goannot$GO)
 
+# FMsays: need this file in the repo too. put the whole folder of gmts?
 gs.msdb<- getGmt("c2.cp.v2024.1.Hs.symbols.gmt", geneIdType= GenenameIdentifier(), collectionType = BroadCollection("c2"))
 
 
@@ -605,7 +648,7 @@ decoupler_genes<- rownames(decoupler_counts)
 decoupler_genes<-mapIds(org.Hs.eg.db, keys = decoupler_genes, column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
 rownames(decoupler_counts)<- decoupler_genes
 
-
+# FMsays: split up a bit this very long chunk and tell what happens
 
 res_t1_0.5Gy_vs_0Gy<- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, FDR = 0.05)
 
@@ -666,6 +709,7 @@ sample_acts_t2_2Gy <- run_ulm(mat=res_t2_2Gy_vs_0Gy[, 'stat', drop = FALSE], net
 
 sample_acts_t2_4Gy <- run_ulm(mat=res_t2_4Gy_vs_0Gy[, 'stat', drop = FALSE], net=net, .source='source', .target='target', .mor='mor')
 
+# FMsays: errors here, maybe because of the missing rowname operation?
 
 # Filter top TFs in both signs
 
@@ -750,6 +794,7 @@ pheatmap(t(sample_acts_mat), border_color = NA, color=my_color, breaks = my_brea
 tpm_mat<- assay(dds, "abundance")
 tpm_mat <- tpm_mat[rowSums(tpm_mat) != 0, ]
 
+# FMsays: name here, racle is one example dataset :) plus you need the symbols?
 ti_racle <- quantiseqr::run_quantiseq(
   expression_data = tpm_mat,
   signature_matrix = "TIL10",
@@ -785,6 +830,10 @@ pheatmap(res_abis_matrix_ordered - rowMeans(res_abis_matrix_ordered), cluster_co
 #Omnideconv (in Docker) and CIBERSORTx (in web-based tool) were also performed
 
 ```
+
+FMsays: as an additional section, we can add something like a recap one
+And also: something where the tabular objects in R are then later exported, ideally all in something like the `_output` folder, with names clevely chosen for them?
+
 
 # Session information
 
