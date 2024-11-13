@@ -104,19 +104,19 @@ dds_t2$Dose <- relevel(dds_t2$Dose, "0Gy")
 ## Variance stablizing transformation
 
 ```{r}
-vsd <- vst(dds)
-vsd_t1 <- vst(dds_t1)
-vsd_t2 <- vst(dds_t2)
+vsd_phybion <- vst(dds)
+vsd_phybion_t1 <- vst(dds_t1)
+vsd_phybion_t2 <- vst(dds_t2)
 
 
-vsd_corrected <- vsd
-assay(vsd_corrected) <- limma::removeBatchEffect(assay(vsd), batch = vsd$Donors)
+vsd_corrected <- vsd_phybion
+assay(vsd_corrected) <- limma::removeBatchEffect(assay(vsd_phybion), batch = vsd_phybion$Donors)
 
-vsd_t1_corrected <- vsd_t1
-assay(vsd_t1_corrected) <- limma::removeBatchEffect(assay(vsd_t1), batch = vsd_t1$Donors)
+vsd_t1_corrected <- vsd_phybion_t1
+assay(vsd_t1_corrected) <- limma::removeBatchEffect(assay(vsd_phybion_t1), batch = vsd_phybion_t1$Donors)
 
-vsd_t2_corrected <- vsd_t2
-assay(vsd_t2_corrected) <- limma::removeBatchEffect(assay(vsd_t2), batch = vsd_t2$Donors)
+vsd_t2_corrected <- vsd_phybion_t2
+assay(vsd_t2_corrected) <- limma::removeBatchEffect(assay(vsd_phybion_t2), batch = vsd_phybion_t2$Donors)
 ```
 
 ## checking read coverage over the samples
@@ -143,7 +143,7 @@ ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)) +
 
 # clustering samples
 
-sampleDists <- dist(t(assay(vsd)))
+sampleDists <- dist(t(assay(vsd_corrected)))
 
 sampleDistMatrix <- as.matrix(sampleDists)
 
@@ -171,13 +171,13 @@ pheatmap(sampleDistMatrix,
 
 # clustering Genes
 
-topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 30)
+topVarGenes <- head(order(rowVars(assay(vsd_corrected)), decreasing = TRUE), 50)
 
-mat <- assay(vsd)[topVarGenes, ]
+mat <- assay(vsd_corrected)[topVarGenes, ]
 
 mat <- mat - rowMeans(mat)
 
-anno <- as.data.frame(colData(vsd)[, c("Sex", "Time_point", "Donors")])
+anno <- as.data.frame(colData(vsd_corrected)[, c("Sex", "Time_point", "Donors")])
 
 genes <- rownames(mat)
 
@@ -190,6 +190,7 @@ genes <- mapIds(org.Hs.eg.db,
 rownames(mat) <- genes
 
 pheatmap(mat, annotation_col = anno)
+
 ```
 
 #Annotations
@@ -293,7 +294,6 @@ resuSet <-
 dds_t2 <- DESeq(dds_t2)
 
 resultsNames(dds_t2)
-
 
 
 resuSet <-
@@ -584,7 +584,7 @@ p1 / p2
 #Gene Set Variation Analysis
 
 ```{r}
-exprs_mat <- assay(vsd)
+exprs_mat <- assay(vsd_phybion)
 
 genes <- rownames(exprs_mat)
 
@@ -643,7 +643,7 @@ summary(results_f_gsva)
 
 ```{r}
 
-decoupler_counts <- assay(vsd)
+decoupler_counts <- assay(vsd_phybion)
 
 decoupler_genes <- rownames(decoupler_counts)
 
@@ -657,42 +657,112 @@ decoupler_genes <- mapIds(
 
 rownames(decoupler_counts) <- decoupler_genes
 
+# t1_0.5Gy
+res_t1_0.5Gy_vs_0Gy <-resuSet$t1_0.5Gy_vs_0Gy$res_DESeq
 
-res_t1_0.5Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t1_0.5Gy_vs_0Gy$res_DESeq)
+res_t1_0.5Gy_vs_0Gy<- deresult_to_df(res_t1_0.5Gy_vs_0Gy)
 
 res_t1_0.5Gy_vs_0Gy<- na.omit(res_t1_0.5Gy_vs_0Gy)
+# Filter out rows with any blank cells
+res_t1_0.5Gy_vs_0Gy <- res_t1_0.5Gy_vs_0Gy[!apply(res_t1_0.5Gy_vs_0Gy == "", 1, any), ]
+res_t1_0.5Gy_vs_0Gy<- res_t1_0.5Gy_vs_0Gy[!duplicated(res_t1_0.5Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_0.5Gy_vs_0Gy) <- res_t1_0.5Gy_vs_0Gy$SYMBOL
 
-res_t1_1Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t1_1Gy_vs_0Gy$res_DESeq)
+#t1_1Gy
+
+res_t1_1Gy_vs_0Gy <-resuSet$t1_1Gy_vs_0Gy$res_DESeq
+
+res_t1_1Gy_vs_0Gy<- deresult_to_df(res_t1_1Gy_vs_0Gy)
+
 
 res_t1_1Gy_vs_0Gy<- na.omit(res_t1_1Gy_vs_0Gy)
+# Filter out rows with any blank cells
+res_t1_1Gy_vs_0Gy <- res_t1_1Gy_vs_0Gy[!apply(res_t1_1Gy_vs_0Gy == "", 1, any), ]
+res_t1_1Gy_vs_0Gy<- res_t1_1Gy_vs_0Gy[!duplicated(res_t1_1Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_1Gy_vs_0Gy) <- res_t1_1Gy_vs_0Gy$SYMBOL
 
-res_t1_2Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t1_2Gy_vs_0Gy$res_DESeq)
+#t1_2Gy
+
+res_t1_2Gy_vs_0Gy <-resuSet$t1_2Gy_vs_0Gy$res_DESeq
+
+res_t1_2Gy_vs_0Gy<- deresult_to_df(res_t1_2Gy_vs_0Gy)
+
+res_t1_2Gy_vs_0Gy<- na.omit(res_t1_2Gy_vs_0Gy)
+# Filter out rows with any blank cells
+res_t1_2Gy_vs_0Gy <- res_t1_2Gy_vs_0Gy[!apply(res_t1_2Gy_vs_0Gy == "", 1, any), ]
+res_t1_2Gy_vs_0Gy<- res_t1_2Gy_vs_0Gy[!duplicated(res_t1_2Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_2Gy_vs_0Gy) <- res_t1_2Gy_vs_0Gy$SYMBOL
 
-res_t1_4Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t1_4Gy_vs_0Gy$res_DESeq)
+#t1_4Gy
+
+res_t1_4Gy_vs_0Gy <-resuSet$t1_4Gy_vs_0Gy$res_DESeq
+
+res_t1_4Gy_vs_0Gy<- deresult_to_df(res_t1_4Gy_vs_0Gy)
+
+res_t1_4Gy_vs_0Gy<- na.omit(res_t1_4Gy_vs_0Gy)
+# Filter out rows with any blank cells
+res_t1_4Gy_vs_0Gy <- res_t1_4Gy_vs_0Gy[!apply(res_t1_4Gy_vs_0Gy == "", 1, any), ]
+res_t1_4Gy_vs_0Gy<- res_t1_4Gy_vs_0Gy[!duplicated(res_t1_4Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_4Gy_vs_0Gy) <- res_t1_4Gy_vs_0Gy$SYMBOL
 
-res_t2_0.5Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t2_0.5Gy_vs_0Gy$res_DESeq)
+
+# t2_0.5Gy
+
+res_t2_0.5Gy_vs_0Gy <-resuSet$t2_0.5Gy_vs_0Gy$res_DESeq
+
+res_t2_0.5Gy_vs_0Gy<- deresult_to_df(res_t2_0.5Gy_vs_0Gy)
+
+res_t2_0.5Gy_vs_0Gy<- na.omit(res_t2_0.5Gy_vs_0Gy)
+
+# Filter out rows with any blank cells
+res_t2_0.5Gy_vs_0Gy <- res_t2_0.5Gy_vs_0Gy[!apply(res_t2_0.5Gy_vs_0Gy == "", 1, any), ]
+res_t2_0.5Gy_vs_0Gy<- res_t2_0.5Gy_vs_0Gy[!duplicated(res_t2_0.5Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_0.5Gy_vs_0Gy) <- res_t2_0.5Gy_vs_0Gy$SYMBOL
 
-res_t2_1Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t2_1Gy_vs_0Gy$res_DESeq)
+#t2_1Gy
+
+res_t2_1Gy_vs_0Gy <-resuSet$t2_1Gy_vs_0Gy$res_DESeq
+
+res_t2_1Gy_vs_0Gy<- deresult_to_df(res_t2_1Gy_vs_0Gy)
+
+res_t2_1Gy_vs_0Gy<- na.omit(res_t2_1Gy_vs_0Gy)
+# Filter out rows with any blank cells
+res_t2_1Gy_vs_0Gy <- res_t2_1Gy_vs_0Gy[!apply(res_t2_1Gy_vs_0Gy == "", 1, any), ]
+res_t2_1Gy_vs_0Gy<- res_t2_1Gy_vs_0Gy[!duplicated(res_t2_1Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_1Gy_vs_0Gy) <- res_t2_1Gy_vs_0Gy$SYMBOL
 
-res_t2_2Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t2_2Gy_vs_0Gy$res_DESeq)
+#t2_2Gy 
+
+res_t2_2Gy_vs_0Gy <-resuSet$t2_2Gy_vs_0Gy$res_DESeq
+
+res_t2_2Gy_vs_0Gy<- deresult_to_df(res_t2_2Gy_vs_0Gy)
+
+res_t2_2Gy_vs_0Gy<- na.omit(res_t2_2Gy_vs_0Gy)
+# Filter out rows with any blank cells
+res_t2_2Gy_vs_0Gy <- res_t2_2Gy_vs_0Gy[!apply(res_t2_2Gy_vs_0Gy == "", 1, any), ]
+res_t2_2Gy_vs_0Gy<- res_t2_2Gy_vs_0Gy[!duplicated(res_t2_2Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_2Gy_vs_0Gy) <- res_t2_2Gy_vs_0Gy$SYMBOL
 
-res_t2_4Gy_vs_0Gy <- mosdef::deresult_to_df(resuSet$t2_4Gy_vs_0Gy$res_DESeq)
+#t2_4Gy
+
+res_t2_4Gy_vs_0Gy <-resuSet$t2_4Gy_vs_0Gy$res_DESeq
+
+res_t2_4Gy_vs_0Gy<- deresult_to_df(res_t2_4Gy_vs_0Gy)
+
+res_t2_4Gy_vs_0Gy<- na.omit(res_t2_4Gy_vs_0Gy)
+# Filter out rows with any blank cells
+res_t2_4Gy_vs_0Gy <- res_t2_4Gy_vs_0Gy[!apply(res_t2_4Gy_vs_0Gy == "", 1, any), ]
+res_t2_4Gy_vs_0Gy<- res_t2_4Gy_vs_0Gy[!duplicated(res_t2_4Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_4Gy_vs_0Gy) <- res_t2_4Gy_vs_0Gy$SYMBOL
+
 ```
 
 ## Performing the analysis
