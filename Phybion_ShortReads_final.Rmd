@@ -728,20 +728,39 @@ summary(results_f_gsva)
 
 ```{r}
 
-dds_mat<- counts(dds)
+decoupler_counts <- assay(vsd)
 
-Vars_raw<- rowVars(dds_mat)
+vsds_vars<- rowVars(decoupler_counts)
 
-dds_mat<- cbind(dds_mat, Vars_raw)
+decoupler_genes <- rownames(decoupler_counts)
 
-res_duplicates <- res_t1_0.5Gy_vs_0Gy$SYMBOL[duplicated(res_t1_0.5Gy_vs_0Gy$SYMBOL)]
+decoupler_genes <- mapIds(
+  org.Hs.eg.db,
+  keys = decoupler_genes,
+  column = "SYMBOL",
+  keytype = "ENSEMBL",
+  multiVals = "first"
+)
 
-res_duplicates<- res_t1_0.5Gy_vs_0Gy[res_t1_0.5Gy_vs_0Gy$SYMBOL %in% res_duplicates, c("SYMBOL", "id")]
+decoupler_counts<- as.data.frame(decoupler_counts)
 
-dds_mat_dup<- dds_mat[res_duplicates$id, ]
+decoupler_counts$SYMBOL<- decoupler_genes
+decoupler_counts$id <- rownames(decoupler_counts)
+
+decoupler_counts$Vars<- vsds_vars
+
+bulk_mat_dup<-  bulk_mat$SYMBOL[duplicated(bulk_mat$SYMBOL)]
+
+bulk_mat_dup<- bulk_mat[bulk_mat$SYMBOL %in% bulk_mat_dup, c("SYMBOL", "id")]
+
+#res_duplicates <- res_t1_0.5Gy_vs_0Gy$SYMBOL[duplicated(res_t1_0.5Gy_vs_0Gy$SYMBOL)]
+
+#res_duplicates<- res_t1_0.5Gy_vs_0Gy[res_t1_0.5Gy_vs_0Gy$SYMBOL %in% res_duplicates, c("SYMBOL", "id")]
+
+dds_mat_dup<- bulk_mat[bulk_mat_dup$id, ]
 
 
-dds_mat_dup <- cbind (dds_mat_dup, res_duplicates$SYMBOL)
+dds_mat_dup <- cbind (dds_mat_dup, bulk_mat_dup$SYMBOL)
 
 dds_mat_dup<- as.data.frame(dds_mat_dup)
 
@@ -750,7 +769,7 @@ dds_mat_dup <- dds_mat_dup %>% rownames_to_column("Ensembl_ID")
 
 
 filtered_ddd <- dds_mat_dup %>%
-  group_by(V32) %>%
+  group_by(SYMBOL) %>%
   slice_max(order_by = Vars_raw, n = 1) %>%
   ungroup()
 
@@ -761,6 +780,11 @@ dds_mat_dup <- dds_mat_dup %>% column_to_rownames("Ensembl_ID")
 
 
 ddd_low_var<- as.data.frame(dds_mat_dup[ ! rownames(dds_mat_dup)  %in%  rownames(filtered_ddd), ])
+
+bulk_mat <- bulk_mat[!rownames(bulk_mat) %in% rownames(ddd_low_var), ]
+
+decoupler_counts <- decoupler_counts[!rownames(decoupler_counts) %in% rownames(ddd_low_var), ]
+
 
 ```
 
@@ -1020,6 +1044,7 @@ sig_sample_acts_t2_4Gy<- sample_acts_t2_4Gy[ sample_acts_t2_4Gy$p_value<=0.05,]
 ## Filter top TFs in both signs
 
 ```{r}
+
 n_tfs <- 25
 
 f_sample_acts <- sample_acts_t2_0.5Gy %>%
@@ -1063,18 +1088,6 @@ ggplot(f_sample_acts, aes(x = reorder(source, score), y = score)) +
 ## Decoupler pheatmap
 
 ```{r}
-
-decoupler_counts <- assay(vsd_phybion)
-
-decoupler_genes <- rownames(decoupler_counts)
-
-decoupler_genes <- mapIds(
-  org.Hs.eg.db,
-  keys = decoupler_genes,
-  column = "SYMBOL",
-  keytype = "ENSEMBL",
-  multiVals = "first"
-)
 
 rownames(decoupler_counts) <- decoupler_genes
 sample_acts <- run_ulm(
@@ -1178,9 +1191,12 @@ pheatmap(res_abis_matrix_ordered - rowMeans(res_abis_matrix_ordered), cluster_co
 
 # preparing the bulk matrix
 
-genes <- rownames(counts(dds))
-
 bulk_mat <- counts(dds)
+
+bulk_mat<- bulk_mat[ rowSums(bulk_mat)>0 , ]
+
+genes <- rownames(bulk_mat)
+
 
 bulk_genes <- mapIds(
   org.Hs.eg.db,
@@ -1190,8 +1206,17 @@ bulk_genes <- mapIds(
   multiVals = "first"
 )
 
-rownames(bulk_mat) <- bulk_genes
+bulk_mat<- cbind(bulk_mat, SYMBOL=bulk_genes)
+bulk_mat<- as.data.frame(bulk_mat)
+bulk_mat$id<- rownames(bulk_mat)
 
+bulk_mat <- bulk_mat[!rownames(bulk_mat) %in% rownames(ddd_low_var), ]
+
+bulk_mat<- na.omit(bulk_mat)
+
+bulk_mat <- bulk_mat[!apply(bulk_mat == "", 1, any), ]
+
+rownames(bulk_mat)<- bulk_mat$SYMBOL
 
 # prepare the single cell matrix
 
