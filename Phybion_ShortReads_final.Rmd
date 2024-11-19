@@ -98,9 +98,11 @@ dds_t1$Dose <- relevel(dds_t1$Dose, "0Gy")
 
 dds_t2$Dose <- relevel(dds_t2$Dose, "0Gy")
 
+dds_0Gy <- dds[, dds$Dose == "0Gy"]
 
 
 ```
+
 ## Variance stablizing transformation
 
 ```{r}
@@ -125,7 +127,6 @@ assay(vsd_t2_corrected) <- limma::removeBatchEffect(assay(vsd_phybion_t2), batch
 plot_totcounts(dds, group = "Dose")
 plot_totcounts(dds, group = "Donors")
 plot_totcounts(dds, group = "Time_point")
-
 
 ## PCA plot
 
@@ -168,10 +169,9 @@ pheatmap(sampleDistMatrix,
   col = colors
 )
 
-
 # clustering Genes
 
-topVarGenes <- head(order(rowVars(assay(vsd_corrected)), decreasing = TRUE), 50)
+topVarGenes <- head(order(rowVars(assay(vsd_corrected)), decreasing = TRUE), 1000)
 
 mat <- assay(vsd_corrected)[topVarGenes, ]
 
@@ -193,7 +193,7 @@ pheatmap(mat, annotation_col = anno)
 
 ```
 
-#Annotations
+# Annotations
 
 
 ```{r}
@@ -205,7 +205,6 @@ anno_df <- get_annotation_orgdb(
   idtype = "ENSEMBL"
 )
 
-
 mart <- useMart(biomart = "ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl")
 
 anns <- getBM(
@@ -215,7 +214,6 @@ anns <- getBM(
   mart = mart
 )
 ```
-
 
 # Differential expression analysis
 
@@ -284,8 +282,6 @@ resuSet <-
     name_res_entry = "t1_1Gy_vs_0Gy"
   )
 
-
-
 # Time point2
 
 
@@ -340,6 +336,53 @@ resuSet <-
     species = "Homo_sapiens",
     name_res_entry = "t2_0.5Gy_vs_0Gy"
   )
+
+```
+
+## effect of incubation on gene expression
+
+```{r}
+design(dds_0Gy)<- ~ Donors + Time_point
+dds_0Gy <- DESeq(dds_0Gy)
+resultsNames(dds_0Gy)
+
+res_0Gy_t2_vs_t1<- results(dds_0Gy, name = "Time_point_6hrs_vs_2hrs", alpha = 0.05)
+
+summary(res_0Gy_t2_vs_t1)
+
+res_0Gy_t2_vs_t1<- deresult_to_df(res_0Gy_t2_vs_t1, FDR = 0.05)
+
+genes<- rownames(res_0Gy_t2_vs_t1)
+
+genes <- mapIds(
+  org.Hs.eg.db,
+  keys = genes,
+  column = "SYMBOL",
+  keytype = "ENSEMBL",
+  multiVals = "first"
+)
+
+
+res_0Gy_t2_vs_t1$SYMBOL<- genes
+
+res_enrich_0Gy_t2_vs_t1<- enrichGO(
+      gene = res_0Gy_t2_vs_t1$SYMBOL,
+      universe = geneUniverseExpr,
+      keyType = "SYMBOL",
+      OrgDb = org.Hs.eg.db,
+      ont = "BP",
+      pAdjustMethod = "BH",
+      pvalueCutoff = 0.01,
+      qvalueCutoff = 0.05,
+      readable = FALSE
+    )
+
+writexl::write_xlsx(res_enrich_0Gy_t2_vs_t1@result, "res_enrich_0Gy_t2_vs_t1.xlsx")
+
+writexl::write_xlsx(res_0Gy_t2_vs_t1, "res_0Gy_t2_vs_t1.xlsx")
+
+
+
 ```
 
 ## since we spotted time effect on non-irradiated samples, DEA to capture radiation-only late effect would be as such
@@ -355,9 +398,15 @@ resultsNames(dds)
 
 # 4Gy t2 Vs 4Gy t1
 
-res_4Gy_time2_vs_time1 <- results(dds, name = "Time_point6hrs.Dose4Gy", test = "Wald", alpha = 0.05)
+res_4Gy_time2_vs_time1 <- results(dds,
+                                  name = "Time_point6hrs.Dose4Gy",
+                                  test = "Wald",
+                                  alpha = 0.05)
 
-res_shrink_4Gy_time2_vs_time1 <- lfcShrink(dds, res = res_4Gy_time2_vs_time1, coef = "Time_point6hrs.Dose4Gy", type = "apeglm")
+res_shrink_4Gy_time2_vs_time1 <- lfcShrink(dds,
+                                           res = res_4Gy_time2_vs_time1,
+                                           coef = "Time_point6hrs.Dose4Gy",
+                                           type = "apeglm")
 
 summary(res_shrink_4Gy_time2_vs_time1)
 
@@ -365,9 +414,15 @@ res_shrink_4Gy_time2_vs_time1 <- deresult_to_df(res_shrink_4Gy_time2_vs_time1, F
 
 # 2Gy t2 Vs 2Gy t1
 
-res_2Gy_time2_vs_time1 <- results(dds, name = "Time_point6hrs.Dose2Gy", test = "Wald", alpha = 0.05)
+res_2Gy_time2_vs_time1 <- results(dds,
+                                  name = "Time_point6hrs.Dose2Gy",
+                                  test = "Wald",
+                                  alpha = 0.05)
 
-res_shrink_2Gy_time2_vs_time1 <- lfcShrink(dds, res = res_2Gy_time2_vs_time1, coef = "Time_point6hrs.Dose2Gy", type = "apeglm")
+res_shrink_2Gy_time2_vs_time1 <- lfcShrink(dds,
+                                           res = res_2Gy_time2_vs_time1,
+                                           coef = "Time_point6hrs.Dose2Gy",
+                                           type = "apeglm")
 
 summary(res_shrink_2Gy_time2_vs_time1)
 
@@ -375,9 +430,15 @@ res_shrink_2Gy_time2_vs_time1 <- deresult_to_df(res_shrink_2Gy_time2_vs_time1, F
 
 # 1Gy t2 Vs 1Gy t1
 
-res_1Gy_time2_vs_time1 <- results(dds, name = "Time_point6hrs.Dose1Gy", test = "Wald", alpha = 0.05)
+res_1Gy_time2_vs_time1 <- results(dds,
+                                  name = "Time_point6hrs.Dose1Gy",
+                                  test = "Wald",
+                                  alpha = 0.05)
 
-res_shrink_2Gy_time2_vs_time1 <- lfcShrink(dds, res = res_1Gy_time2_vs_time1, coef = "Time_point6hrs.Dose1Gy", type = "apeglm")
+res_shrink_2Gy_time2_vs_time1 <- lfcShrink(dds,
+                                           res = res_1Gy_time2_vs_time1,
+                                           coef = "Time_point6hrs.Dose1Gy",
+                                           type = "apeglm")
 
 summary(res_shrink_2Gy_time2_vs_time1)
 
@@ -385,13 +446,20 @@ res_shrink_2Gy_time2_vs_time1 <- deresult_to_df(res_shrink_2Gy_time2_vs_time1, F
 
 # 0.5Gy t2 Vs 0.5Gy t1
 
-res_0.5Gy_time2_vs_time1 <- results(dds, name = "Time_point6hrs.Dose0.5Gy", test = "Wald", alpha = 0.05)
+res_0.5Gy_time2_vs_time1 <- results(dds,
+                                    name = "Time_point6hrs.Dose0.5Gy",
+                                    test = "Wald",
+                                    alpha = 0.05)
 
-res_shrink_0.5Gy_time2_vs_time1 <- lfcShrink(dds, res = res_0.5Gy_time2_vs_time1, coef = "Time_point6hrs.Dose0.5Gy", type = "apeglm")
+res_shrink_0.5Gy_time2_vs_time1 <- lfcShrink(dds,
+                                             res = res_0.5Gy_time2_vs_time1,
+                                             coef = "Time_point6hrs.Dose0.5Gy",
+                                             type = "apeglm")
 
 summary(res_shrink_0.5Gy_time2_vs_time1)
 
 res_shrink_0.5Gy_time2_vs_time1 <- deresult_to_df(res_shrink_0.5Gy_time2_vs_time1, FDR = 0.05)
+
 ```
 
 # Functional Enrichment Analysis
@@ -423,6 +491,21 @@ for (i in names(resuSet)) {
     )
   }
 }
+
+cluster_mosdef <- run_cluPro(
+  de_container = dds,
+  res_de = resuSet$t1_2Gy_vs_0Gy$res_DESeq,
+  mapping = "org.Hs.eg.db",
+  keyType = "SYMBOL",
+  ont = "BP", de_genes= resuSet$t1_2Gy_vs_0Gy$tbl_res_DE$SYMBOL , FDR_threshold = 0.05,bg_genes = geneUniverseExpr)
+
+
+cluster_mosdef<-cluster_mosdef@result[cluster_mosdef@result$p.adjust<=0.05,]
+View(cluster_mosdef)
+
+cluster_origin<-resuSet$t1_2Gy_vs_0Gy$clupro_tbl@result[resuSet$t1_2Gy_vs_0Gy$clupro_tbl@result$p.adjust<=0.05,]
+
+View(cluster_origin)
 
 ```
 
@@ -492,7 +575,7 @@ gtl_t2_4Gy <- GeneTonicList(
 GeneTonic(gtl = gtl_t1_4Gy)
 ```
 
-###GeneTonic example plots
+### GeneTonic example plots
 
 ```{r}
 # GeneTonic Pathway-associated DEGs Heatmap
@@ -511,7 +594,7 @@ scored_mat_t1_0.5Gy_vs_0Gy <- GeneTonic::gs_scores(se = vsd_corrected, gtl = gtl
 GeneTonic::gs_scoresheat(scored_mat_t1_0.5Gy_vs_0Gy, n_gs = 20, cluster_cols = FALSE)
 ```
 
-###GSEA
+## GSEA
 
 ```{r}
 ## background genes
@@ -581,7 +664,7 @@ p1 / p2
 
 ```
 
-#Gene Set Variation Analysis
+# Gene Set Variation Analysis
 
 ```{r}
 exprs_mat <- assay(vsd_phybion)
@@ -639,35 +722,72 @@ results_f_gsva <- decideTests(fit2, p.value = 0.05)
 summary(results_f_gsva)
 ```
 
-#DecoupleR-- Transcription Factors inference
+# DecoupleR-- Transcription Factors inference
+
+## filtering
 
 ```{r}
 
-decoupler_counts <- assay(vsd_phybion)
+dds_mat<- counts(dds)
 
-decoupler_genes <- rownames(decoupler_counts)
+Vars_raw<- rowVars(dds_mat)
 
-decoupler_genes <- mapIds(
-  org.Hs.eg.db,
-  keys = decoupler_genes,
-  column = "SYMBOL",
-  keytype = "ENSEMBL",
-  multiVals = "first"
-)
+dds_mat<- cbind(dds_mat, Vars_raw)
 
-rownames(decoupler_counts) <- decoupler_genes
+res_duplicates <- res_t1_0.5Gy_vs_0Gy$SYMBOL[duplicated(res_t1_0.5Gy_vs_0Gy$SYMBOL)]
+
+res_duplicates<- res_t1_0.5Gy_vs_0Gy[res_t1_0.5Gy_vs_0Gy$SYMBOL %in% res_duplicates, c("SYMBOL", "id")]
+
+dds_mat_dup<- dds_mat[res_duplicates$id, ]
+
+
+dds_mat_dup <- cbind (dds_mat_dup, res_duplicates$SYMBOL)
+
+dds_mat_dup<- as.data.frame(dds_mat_dup)
+
+
+dds_mat_dup <- dds_mat_dup %>% rownames_to_column("Ensembl_ID")
+
+
+filtered_ddd <- dds_mat_dup %>%
+  group_by(V32) %>%
+  slice_max(order_by = Vars_raw, n = 1) %>%
+  ungroup()
+
+# Convert back to rownames 
+filtered_ddd <- filtered_ddd %>% column_to_rownames("Ensembl_ID")
+
+dds_mat_dup <- dds_mat_dup %>% column_to_rownames("Ensembl_ID")
+
+
+ddd_low_var<- as.data.frame(dds_mat_dup[ ! rownames(dds_mat_dup)  %in%  rownames(filtered_ddd), ])
+
+```
+
+## Time point 1
+
+
+```{r}
 
 # t1_0.5Gy
 res_t1_0.5Gy_vs_0Gy <-resuSet$t1_0.5Gy_vs_0Gy$res_DESeq
 
 res_t1_0.5Gy_vs_0Gy<- deresult_to_df(res_t1_0.5Gy_vs_0Gy)
 
+res_t1_0.5Gy_vs_0Gy <- res_t1_0.5Gy_vs_0Gy[!rownames(res_t1_0.5Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
+
 res_t1_0.5Gy_vs_0Gy<- na.omit(res_t1_0.5Gy_vs_0Gy)
+
 # Filter out rows with any blank cells
 res_t1_0.5Gy_vs_0Gy <- res_t1_0.5Gy_vs_0Gy[!apply(res_t1_0.5Gy_vs_0Gy == "", 1, any), ]
-res_t1_0.5Gy_vs_0Gy<- res_t1_0.5Gy_vs_0Gy[!duplicated(res_t1_0.5Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_0.5Gy_vs_0Gy) <- res_t1_0.5Gy_vs_0Gy$SYMBOL
+
+res_t1_0.5Gy_vs_0Gy<- res_t1_0.5Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
+
+
 
 #t1_1Gy
 
@@ -675,13 +795,18 @@ res_t1_1Gy_vs_0Gy <-resuSet$t1_1Gy_vs_0Gy$res_DESeq
 
 res_t1_1Gy_vs_0Gy<- deresult_to_df(res_t1_1Gy_vs_0Gy)
 
+res_t1_1Gy_vs_0Gy <- res_t1_1Gy_vs_0Gy[!rownames(res_t1_1Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
 
 res_t1_1Gy_vs_0Gy<- na.omit(res_t1_1Gy_vs_0Gy)
 # Filter out rows with any blank cells
 res_t1_1Gy_vs_0Gy <- res_t1_1Gy_vs_0Gy[!apply(res_t1_1Gy_vs_0Gy == "", 1, any), ]
-res_t1_1Gy_vs_0Gy<- res_t1_1Gy_vs_0Gy[!duplicated(res_t1_1Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_1Gy_vs_0Gy) <- res_t1_1Gy_vs_0Gy$SYMBOL
+
+res_t1_1Gy_vs_0Gy<- res_t1_1Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
+
 
 #t1_2Gy
 
@@ -689,12 +814,18 @@ res_t1_2Gy_vs_0Gy <-resuSet$t1_2Gy_vs_0Gy$res_DESeq
 
 res_t1_2Gy_vs_0Gy<- deresult_to_df(res_t1_2Gy_vs_0Gy)
 
+res_t1_2Gy_vs_0Gy <- res_t1_2Gy_vs_0Gy[!rownames(res_t1_2Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
+
+
 res_t1_2Gy_vs_0Gy<- na.omit(res_t1_2Gy_vs_0Gy)
 # Filter out rows with any blank cells
 res_t1_2Gy_vs_0Gy <- res_t1_2Gy_vs_0Gy[!apply(res_t1_2Gy_vs_0Gy == "", 1, any), ]
-res_t1_2Gy_vs_0Gy<- res_t1_2Gy_vs_0Gy[!duplicated(res_t1_2Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_2Gy_vs_0Gy) <- res_t1_2Gy_vs_0Gy$SYMBOL
+
+res_t1_2Gy_vs_0Gy<- res_t1_2Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
 
 #t1_4Gy
 
@@ -702,27 +833,40 @@ res_t1_4Gy_vs_0Gy <-resuSet$t1_4Gy_vs_0Gy$res_DESeq
 
 res_t1_4Gy_vs_0Gy<- deresult_to_df(res_t1_4Gy_vs_0Gy)
 
+res_t1_4Gy_vs_0Gy <- res_t1_4Gy_vs_0Gy[!rownames(res_t1_4Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
+
 res_t1_4Gy_vs_0Gy<- na.omit(res_t1_4Gy_vs_0Gy)
 # Filter out rows with any blank cells
 res_t1_4Gy_vs_0Gy <- res_t1_4Gy_vs_0Gy[!apply(res_t1_4Gy_vs_0Gy == "", 1, any), ]
-res_t1_4Gy_vs_0Gy<- res_t1_4Gy_vs_0Gy[!duplicated(res_t1_4Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t1_4Gy_vs_0Gy) <- res_t1_4Gy_vs_0Gy$SYMBOL
 
+res_t1_4Gy_vs_0Gy<- res_t1_4Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
 
+```
+
+## Time point 2
+```{r}
 # t2_0.5Gy
 
 res_t2_0.5Gy_vs_0Gy <-resuSet$t2_0.5Gy_vs_0Gy$res_DESeq
 
 res_t2_0.5Gy_vs_0Gy<- deresult_to_df(res_t2_0.5Gy_vs_0Gy)
 
+res_t2_0.5Gy_vs_0Gy <- res_t2_0.5Gy_vs_0Gy[!rownames(res_t2_0.5Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
+
 res_t2_0.5Gy_vs_0Gy<- na.omit(res_t2_0.5Gy_vs_0Gy)
 
 # Filter out rows with any blank cells
 res_t2_0.5Gy_vs_0Gy <- res_t2_0.5Gy_vs_0Gy[!apply(res_t2_0.5Gy_vs_0Gy == "", 1, any), ]
-res_t2_0.5Gy_vs_0Gy<- res_t2_0.5Gy_vs_0Gy[!duplicated(res_t2_0.5Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_0.5Gy_vs_0Gy) <- res_t2_0.5Gy_vs_0Gy$SYMBOL
+
+res_t2_0.5Gy_vs_0Gy<- res_t2_0.5Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
 
 #t2_1Gy
 
@@ -730,12 +874,17 @@ res_t2_1Gy_vs_0Gy <-resuSet$t2_1Gy_vs_0Gy$res_DESeq
 
 res_t2_1Gy_vs_0Gy<- deresult_to_df(res_t2_1Gy_vs_0Gy)
 
+res_t2_1Gy_vs_0Gy <- res_t2_1Gy_vs_0Gy[!rownames(res_t2_1Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
+
 res_t2_1Gy_vs_0Gy<- na.omit(res_t2_1Gy_vs_0Gy)
 # Filter out rows with any blank cells
 res_t2_1Gy_vs_0Gy <- res_t2_1Gy_vs_0Gy[!apply(res_t2_1Gy_vs_0Gy == "", 1, any), ]
-res_t2_1Gy_vs_0Gy<- res_t2_1Gy_vs_0Gy[!duplicated(res_t2_1Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_1Gy_vs_0Gy) <- res_t2_1Gy_vs_0Gy$SYMBOL
+
+res_t2_1Gy_vs_0Gy<- res_t2_1Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
 
 #t2_2Gy 
 
@@ -743,12 +892,17 @@ res_t2_2Gy_vs_0Gy <-resuSet$t2_2Gy_vs_0Gy$res_DESeq
 
 res_t2_2Gy_vs_0Gy<- deresult_to_df(res_t2_2Gy_vs_0Gy)
 
+res_t2_2Gy_vs_0Gy <- res_t2_2Gy_vs_0Gy[!rownames(res_t2_2Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
+
 res_t2_2Gy_vs_0Gy<- na.omit(res_t2_2Gy_vs_0Gy)
 # Filter out rows with any blank cells
 res_t2_2Gy_vs_0Gy <- res_t2_2Gy_vs_0Gy[!apply(res_t2_2Gy_vs_0Gy == "", 1, any), ]
-res_t2_2Gy_vs_0Gy<- res_t2_2Gy_vs_0Gy[!duplicated(res_t2_2Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_2Gy_vs_0Gy) <- res_t2_2Gy_vs_0Gy$SYMBOL
+
+res_t2_2Gy_vs_0Gy<- res_t2_2Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
 
 #t2_4Gy
 
@@ -756,12 +910,17 @@ res_t2_4Gy_vs_0Gy <-resuSet$t2_4Gy_vs_0Gy$res_DESeq
 
 res_t2_4Gy_vs_0Gy<- deresult_to_df(res_t2_4Gy_vs_0Gy)
 
+res_t2_4Gy_vs_0Gy <- res_t2_4Gy_vs_0Gy[!rownames(res_t2_4Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
+
 res_t2_4Gy_vs_0Gy<- na.omit(res_t2_4Gy_vs_0Gy)
 # Filter out rows with any blank cells
 res_t2_4Gy_vs_0Gy <- res_t2_4Gy_vs_0Gy[!apply(res_t2_4Gy_vs_0Gy == "", 1, any), ]
-res_t2_4Gy_vs_0Gy<- res_t2_4Gy_vs_0Gy[!duplicated(res_t2_4Gy_vs_0Gy$SYMBOL),]
 
 rownames(res_t2_4Gy_vs_0Gy) <- res_t2_4Gy_vs_0Gy$SYMBOL
+
+res_t2_4Gy_vs_0Gy<- res_t2_4Gy_vs_0Gy %>% 
+  mutate(stat = sign(log2FoldChange) * -log10(pvalue)) %>%
+  arrange(desc(stat))
 
 ```
 
@@ -778,6 +937,8 @@ sample_acts_t1_0.5Gy <- run_ulm(
   .mor = "mor"
 )
 
+sig_sample_acts_t1_0.5Gy<- sample_acts_t1_0.5Gy[ sample_acts_t1_0.5Gy$p_value<=0.05,]
+
 sample_acts_t1_1Gy <- run_ulm(
   mat = res_t1_1Gy_vs_0Gy[, "stat", drop = FALSE],
   net = net,
@@ -786,6 +947,7 @@ sample_acts_t1_1Gy <- run_ulm(
   .mor = "mor"
 )
 
+sig_sample_acts_t1_1Gy<- sample_acts_t1_1Gy[ sample_acts_t1_1Gy$p_value<=0.05,]
 
 sample_acts_t1_2Gy <- run_ulm(
   mat = res_t1_2Gy_vs_0Gy[, "stat", drop = FALSE],
@@ -794,6 +956,8 @@ sample_acts_t1_2Gy <- run_ulm(
   .target = "target",
   .mor = "mor"
 )
+
+sig_sample_acts_t1_2Gy<- sample_acts_t1_2Gy[ sample_acts_t1_2Gy$p_value<=0.05,]
 
 
 sample_acts_t1_4Gy <- run_ulm(
@@ -804,6 +968,8 @@ sample_acts_t1_4Gy <- run_ulm(
   .mor = "mor"
 )
 
+sig_sample_acts_t1_4Gy<- sample_acts_t1_4Gy[ sample_acts_t1_4Gy$p_value<=0.05,]
+
 
 sample_acts_t2_0.5Gy <- run_ulm(
   mat = res_t2_0.5Gy_vs_0Gy[, "stat", drop = FALSE],
@@ -812,6 +978,8 @@ sample_acts_t2_0.5Gy <- run_ulm(
   .target = "target",
   .mor = "mor"
 )
+
+sig_sample_acts_t2_0.5Gy<- sample_acts_t2_0.5Gy[ sample_acts_t2_0.5Gy$p_value<=0.05,]
 
 
 sample_acts_t2_1Gy <- run_ulm(
@@ -823,6 +991,9 @@ sample_acts_t2_1Gy <- run_ulm(
 )
 
 
+sig_sample_acts_t2_1Gy<- sample_acts_t2_1Gy[ sample_acts_t2_1Gy$p_value<=0.05,]
+
+
 sample_acts_t2_2Gy <- run_ulm(
   mat = res_t2_2Gy_vs_0Gy[, "stat", drop = FALSE],
   net = net,
@@ -830,6 +1001,8 @@ sample_acts_t2_2Gy <- run_ulm(
   .target = "target",
   .mor = "mor"
 )
+
+sig_sample_acts_t2_2Gy<- sample_acts_t2_2Gy[ sample_acts_t2_2Gy$p_value<=0.05,]
 
 
 sample_acts_t2_4Gy <- run_ulm(
@@ -839,6 +1012,9 @@ sample_acts_t2_4Gy <- run_ulm(
   .target = "target",
   .mor = "mor"
 )
+
+sig_sample_acts_t2_4Gy<- sample_acts_t2_4Gy[ sample_acts_t2_4Gy$p_value<=0.05,]
+
 ```
 
 ## Filter top TFs in both signs
@@ -887,6 +1063,20 @@ ggplot(f_sample_acts, aes(x = reorder(source, score), y = score)) +
 ## Decoupler pheatmap
 
 ```{r}
+
+decoupler_counts <- assay(vsd_phybion)
+
+decoupler_genes <- rownames(decoupler_counts)
+
+decoupler_genes <- mapIds(
+  org.Hs.eg.db,
+  keys = decoupler_genes,
+  column = "SYMBOL",
+  keytype = "ENSEMBL",
+  multiVals = "first"
+)
+
+rownames(decoupler_counts) <- decoupler_genes
 sample_acts <- run_ulm(
   mat = decoupler_counts,
   net = net,
@@ -1106,12 +1296,65 @@ exportr <- function(resuSet, resu_name = "out_SET") {
 }
 
 exportr(resuSet = resuSet, resu_name = "Phybion")
+
 ```
 
 # Session information
 
 ```{r sessioninfo}
-
 sessionInfo()
+```
+
+
+```{r}
+
+degs_t1<- c(resuSet$t1_0.5Gy_vs_0Gy$tbl_res_DE$id, resuSet$t1_1Gy_vs_0Gy$tbl_res_DE$id,resuSet$t1_2Gy_vs_0Gy$tbl_res_DE$id,resuSet$t1_4Gy_vs_0Gy$tbl_res_DE$id)
+
+degs_t1<- unique(degs_t1)
+
+degs_t2<- c(resuSet$t2_0.5Gy_vs_0Gy$tbl_res_DE$id, resuSet$t2_1Gy_vs_0Gy$tbl_res_DE$id,resuSet$t2_2Gy_vs_0Gy$tbl_res_DE$id,resuSet$t2_4Gy_vs_0Gy$tbl_res_DE$id)
+
+degs_t2<- unique(degs_t2)
+
+assay_to_use<- assay(vsd_t1_corrected)
+
+#topVarGenes <- head(order(rowVars(assay(vsd_corrected)), decreasing = TRUE), 100)
+
+assay_to_use_de <- assay_to_use[degs_t1,]
+assay_to_use_de <- assay_to_use_de - rowMeans(assay_to_use_de)
+
+
+set.seed(2024)
+
+ha3 <- Heatmap(assay_to_use_de, name = "Z-score\nexpression\nvalues", 
+               col = circlize::colorRamp2(c(-max(abs(assay_to_use_de)), 
+                                           0, 
+                                           max(abs(assay_to_use_de))), 
+                                          c("navy", "floralwhite", "firebrick")), 
+               row_km = 8,
+               show_row_names = TRUE,
+               cluster_row_slices = FALSE,
+               row_names_gp = gpar(fontsize = 6),
+               cluster_columns = F)
+
+ha3 <- draw(ha3)
+
+
+row_order(ha3)
+
+rownames(assay_to_use_de)
+
+de_grouped_rows <- row_order(ha3)
+de_grouped <- lapply(de_grouped_rows, function(arg) {
+  this_cluster <- arg
+  genes_cluster <- rownames(assay_to_use_de)[this_cluster]
+  genes_cluster <- genes_cluster[!is.na(genes_cluster)]
+  genes_cluster <- sort(genes_cluster)
+  genes_cluster
+})
+
+names(de_grouped) <- paste0("DE cluster ", 1:8)
+
+de_grouped [[1]]
 
 ```
