@@ -1,7 +1,11 @@
 ---
 title: "Phybion_ShortReads_final"
 author: "Ahmed Hassan"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
 date: "2024-11-04"
 ---
 
