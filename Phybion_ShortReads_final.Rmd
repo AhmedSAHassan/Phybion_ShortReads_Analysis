@@ -2044,11 +2044,9 @@ saveRDS(Sc_count_matrix, "sc_blood_modified.rds")
 
 #omnideconv::plot_deconvolution(list("bayesprism" = deconv_bayesprism), "bar", "method", "Spectral")
 
-
-#pheatmap(t(deconv_bayesprism[, - c(3,4,6,8,9,10, 15, 16, 18,21,22)]), annotation_col = anno, labels_col = rep(c(1,2,3), 10))
+pheatmap(t(deconv_bayesprism[, - c(3,4,6,8,9,10, 15, 16, 18,21,22)]), annotation_col = column_annotation, labels_col = rep(c(1,2,3), 10), display_numbers = TRUE, number_format = "%.2f")
 
 # CIBERSORTx (in web-based tool) was also performed
-
 
 ```
 
