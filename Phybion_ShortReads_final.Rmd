@@ -96,7 +96,6 @@ library("rstanarm")
 library("meta")
 ```
 
-
 #Exploratory Data Analysis (EDA)
 
 ```{r}
@@ -135,10 +134,7 @@ dds_t1$Dose <- relevel(dds_t1$Dose, "0Gy")
 dds_t2$Dose <- relevel(dds_t2$Dose, "0Gy")
 
 dds_0Gy <- dds[, dds$Dose == "0Gy"]
-<<<<<<< HEAD
 
-=======
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 ```
 
 ## Variance stablizing transformation
@@ -212,31 +208,6 @@ pheatmap(sampleDistMatrix,
   col = colors
 )
 
-<<<<<<< HEAD
-=======
-# clustering Genes
-
-topVarGenes <- head(order(rowVars(assay(vsd_corrected)), decreasing = TRUE), 100)
-
-mat <- assay(vsd_corrected)[topVarGenes, ]
-
-mat <- mat - rowMeans(mat)
-
-anno <- as.data.frame(colData(vsd_corrected)[, c("Sex", "Time_point", "Donors")])
-
-genes <- rownames(mat)
-
-genes <- mapIds(org.Hs.eg.db,
-  keys = genes,
-  column = "SYMBOL",
-  keytype = "ENSEMBL",
-  multiVals = "first"
-)
-
-rownames(mat) <- genes
-
-pheatmap(mat, annotation_col = anno, cluster_cols = F)
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 ```
 
 # Annotations
@@ -383,25 +354,13 @@ resuSet <-
     species = "Homo_sapiens",
     name_res_entry = "t2_0.5Gy_vs_0Gy"
   )
-<<<<<<< HEAD
 
 # effect of incubation time on gene expression
 
-=======
-```
-
-## effect of incubation on gene expression
-
-```{r}
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 design(dds_0Gy) <- ~ Donors + Time_point
 dds_0Gy <- DESeq(dds_0Gy)
 resultsNames(dds_0Gy)
 
-<<<<<<< HEAD
-=======
-res_0Gy_t2_vs_t1 <- results(dds_0Gy, name = "Time_point_6hrs_vs_2hrs", alpha = 0.05)
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 
 resuSet <-
   create_DEresults(
@@ -414,13 +373,7 @@ resuSet <-
     name_res_entry = "t2_vs_t1_0Gy"
   )
 
-<<<<<<< HEAD
 
-=======
-res_0Gy_t2_vs_t1 <- deresult_to_df(res_0Gy_t2_vs_t1, FDR = 0.05)
-
-genes <- rownames(res_0Gy_t2_vs_t1)
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 
 ```
 
@@ -590,7 +543,6 @@ venn.plot_2h <- venn.diagram(
 
 grid::grid.draw(venn.plot_2h)
 
-<<<<<<< HEAD
 # 6h post-irradiation
 
 list_DEGs_t2 <- list(
@@ -615,165 +567,7 @@ venn.plot_6h <- venn.diagram(
 )
 
 grid::grid.draw(venn.plot_6h)
-=======
-res_0Gy_t2_vs_t1$SYMBOL <- genes
 
-res_enrich_0Gy_t2_vs_t1 <- enrichGO(
-  gene = res_0Gy_t2_vs_t1$SYMBOL,
-  universe = geneUniverseExpr,
-  keyType = "SYMBOL",
-  OrgDb = org.Hs.eg.db,
-  ont = "BP",
-  pAdjustMethod = "BH",
-  pvalueCutoff = 0.01,
-  qvalueCutoff = 0.05,
-  readable = FALSE
-)
-
-writexl::write_xlsx(res_enrich_0Gy_t2_vs_t1@result, "res_enrich_0Gy_t2_vs_t1.xlsx")
-
-writexl::write_xlsx(res_0Gy_t2_vs_t1, "res_0Gy_t2_vs_t1.xlsx")
-```
-
-## Volcano plot
-
-```{r}
-
-volcPlot <- de_volcano(
-  res_de = resuSet$t1_4Gy_vs_0Gy$res_DESeq,
-  mapping = "org.Hs.eg.db",
-  labeled_genes = 50,
-  logfc_cutoff = 1
-)
-volcPlot
-
-```
-
-## Creating gene plotting function
-
-```{r}
-plot_gene <- function (dds, gene, intgroup = "condition", assay = "counts", 
-                       annotation_obj = NULL, normalized = TRUE, transform = TRUE, 
-                       labels_display = FALSE, labels_repel = TRUE, plot_type = "auto", 
-                       return_data = FALSE, color_by = "Donors", gtl = NULL) 
-{
-  plot_type <- match.arg(plot_type, c("auto", "jitteronly", 
-                                      "boxplot", "violin", "sina"))
-  
-  if (!is.null(gtl)) {
-    checkup_gtl(gtl)
-    dds <- gtl$dds
-    res_de <- gtl$res_de
-    res_enrich <- gtl$res_enrich
-    annotation_obj <- gtl$annotation_obj
-  }
-
-  if (!(all(intgroup %in% colnames(colData(dds))))) {
-    stop("`intgroup` not found in the colData slot of the dds object", 
-         "\nPlease specify one of the following: \n", paste0(colnames(colData(dds)), 
-                                                             collapse = ", "))
-  }
-  
-  df <- get_expression_values(dds = dds, gene = gene, intgroup = intgroup, 
-                              assay = assay, normalized = normalized)
-  df$sample_id <- rownames(df)
-  
-  # Explicitly add the Donors column from colData(dds) if it exists
-  if ("Donors" %in% colnames(colData(dds))) {
-    df$Donors <- colData(dds)[, "Donors"]
-  } else {
-    stop("The `Donors` column is missing in the colData of the dds object.")
-  }
-  
-  if (!is.null(annotation_obj)) {
-    genesymbol <- annotation_obj$gene_name[match(gene, annotation_obj$gene_id)]
-  } else {
-    genesymbol <- ""
-  }
-  
-  onlyfactors <- df[, match(intgroup, colnames(df))]
-  df$plotby <- interaction(onlyfactors)
-  min_by_groups <- min(table(df$plotby))
-  
-  if (return_data) {
-    return(df)
-  }
-
-  p <- ggplot(df, aes(x = .data$plotby, y = .data$exp_value, col = .data[[color_by]])) + 
-    scale_x_discrete(name = "") + 
-    scale_color_discrete(name = "Experimental\ngroup") + 
-    theme_bw()
-
-  # Add error bars for standard deviation
-  #p <- p + stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "errorbar", width = 0.2, color = "black")
-
-  jit_pos <- position_jitter(width = 0.2, height = 0, seed = 42)
-  
-  if (plot_type == "jitteronly" || (plot_type == "auto" & min_by_groups <= 3)) {
-    p <- p + geom_point(position = jit_pos)
-  } else if (plot_type == "boxplot" || (plot_type == "auto" & (min_by_groups > 3 & min_by_groups < 10))) {
-    p <- p + geom_boxplot(outlier.shape = NA) + geom_point(position = jit_pos)
-  } else if (plot_type == "violin" || (plot_type == "auto" & (min_by_groups >= 11 & min_by_groups < 40))) {
-    p <- p + geom_violin() + geom_point(position = jit_pos) + 
-      stat_summary(fun = median, fun.min = median, fun.max = median, geom = "crossbar", width = 0.3)
-  } else if (plot_type == "sina" || (plot_type == "auto" & (min_by_groups >= 40))) {
-    p <- p + ggforce::geom_sina() + stat_summary(fun = median, 
-                                                 fun.min = median, fun.max = median, geom = "crossbar", width = 0.3)
-  }
-
-  # Remove sample labels from plot by setting `labels_display = FALSE`
-  if (labels_display) {
-    if (labels_repel) {
-      p <- p + ggrepel::geom_text_repel(aes(label = .data$sample_id), 
-                                        min.segment.length = 0, position = jit_pos)
-    } else {
-      p <- p + geom_text(aes(label = .data$sample_id), hjust = -0.1, vjust = 0.1, position = jit_pos)
-    }
-  }
-  
-  # Add grey line representing the mean across all groups
-  p <- p + stat_summary(fun = mean, geom = "line", aes(group = 1), 
-                        color = "grey80", linewidth = 0.5)
-
-  y_label <- if (assay == "counts" & normalized) {
-    "Normalized counts"
-  } else if (assay == "counts" & !normalized) {
-    "Counts"
-  } else if (assay == "abundance") {
-    "TPM - Transcripts Per Million"
-  } else {
-    assay
-  }
-  
-  if (transform) {
-    p <- p + scale_y_log10(name = paste0(y_label, " (log10 scale)"))
-  } else {
-    p <- p + scale_y_continuous(name = y_label)
-  }
-
-  if (!is.null(annotation_obj)) {
-    p <- p + labs(title = paste0(genesymbol, " - ", gene))
-  } else {
-    p <- p + labs(title = paste0(gene))
-  }
-
-  return(p)
-}
-
-
-```
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
-
-## Checking the gene pattern across doses
-
-```{r}
-
-plot_gene(
-  dds= dds_t1,
-  gene = "ENSG00000169429",
-  intgroup = "Dose",
-  annotation_obj = anno_df
-)
 ```
 
 ## since we spotted time effect on non-irradiated samples, DEA to capture radiation-only late effect would be as such
@@ -858,6 +652,7 @@ res_shrink_0.5Gy_time2_vs_time1 <- lfcShrink(dds,
 summary(res_shrink_0.5Gy_time2_vs_time1)
 
 res_shrink_0.5Gy_time2_vs_time1 <- deresult_to_df(res_shrink_0.5Gy_time2_vs_time1, FDR = 0.05)
+
 ```
 
 # Novel radiosensitive genes
@@ -981,7 +776,6 @@ for (i in names(resuSet)) {
     )
   }
 }
-<<<<<<< HEAD
 
 ```
 
@@ -1011,8 +805,6 @@ exportr <- function(resuSet, resu_name = "out_SET") {
 }
 
 exportr(resuSet = resuSet, resu_name = "Phybion")
-=======
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 ```
 
 ## Creating GeneTonic objects
@@ -1144,7 +936,6 @@ gs_heatmap(
 
 # GeneTonic Geneset Heatmap t1_0.5Gy_vs_0Gy
 
-<<<<<<< HEAD
 
 vsd_corrected_ordred <- vsd_corrected[, c(1, 2, 3, 7, 8, 9, 13, 14, 15, 19, 20, 21, 25, 26, 27, 4, 5, 6, 10, 11, 12, 16, 17, 18, 22, 23, 24, 28, 29, 30)]
 
@@ -1177,31 +968,11 @@ column_annotation <- HeatmapAnnotation(
 
 
 ht<-Heatmap(scored_mat_t1_1Gy_vs_0Gy[1:15,],
-=======
-anno_t2 <- as.data.frame(colData(vsd_phybion_t2)[, c("Sex", "Time_point", "Donors", "Dose")])
-anno_t1 <- as.data.frame(colData(vsd_phybion_t1)[, c("Sex", "Time_point", "Donors", "Dose")])
-anno_full <- as.data.frame(colData(vsd_phybion)[, c("Sex", "Time_point", "Donors", "Dose")])
-
-
-vsd_corrected_ordred <- vsd_corrected[, c(1, 2, 3, 7, 8, 9, 13, 14, 15, 19, 20, 21, 25, 26, 27, 4, 5, 6, 10, 11, 12, 16, 17, 18, 22, 23, 24, 28, 29, 30)]
-
-scored_mat_t2_4Gy_vs_0Gy <- GeneTonic::gs_scores(se = vsd_t2_corrected, gtl = gtl_t2_4Gy)
-
-column_annotation <- HeatmapAnnotation(
-  Sex = anno_t2$Sex,
-  Dose = anno_t2$Dose,
-  col = anno_colors
-)
-
-
-Heatmap(scored_mat_t2_4Gy_vs_0Gy[1:30, ],
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
   name = "Expression",
   top_annotation = column_annotation,
   cluster_columns = F, # Optional: Cluster columns
   cluster_rows = F, # Optional: Cluster rows
   show_row_names = TRUE,
-<<<<<<< HEAD
   show_column_names = TRUE, 
   row_dend_side = "left",
   row_names_side = "left",
@@ -1268,19 +1039,6 @@ ggs_obj <- GeneTonic::ggs_graph(gtl = gtl_t1_1Gy, prettify = T,n_gs = 15)
 
 visNetwork::visIgraph(ggs_obj)
 
-=======
-  show_column_names = TRUE, row_dend_side = "left",
-  row_names_side = "left",
-  row_names_gp = gpar(fontsize = 4),
-  width = unit(12, "cm"),
-  heatmap_height = unit(12, "cm"),
-  column_names_gp = gpar(fontsize = 5)
-)
-
-# OR
-
-GeneTonic::gs_scoresheat(scored_mat_t2_4Gy_vs_0Gy, n_gs = 30, cluster_cols = FALSE)
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 ```
 
 ## GSEA
@@ -1348,6 +1106,7 @@ p2 <- gseaplot(em2,
 )
 
 p1 / p2
+
 ```
 
 # Gene Set Variation Analysis
@@ -1516,14 +1275,9 @@ dds_mat <- dds_mat[, -c(31, 32, 33, 34)]
 
 ```{r}
 # t1_0.5Gy
-<<<<<<< HEAD
 
 res_t1_0.5Gy_vs_0Gy <- resuSet$t1_0.5Gy_vs_0Gy$res_DESeq
 
-=======
-res_t1_0.5Gy_vs_0Gy <- resuSet$t1_0.5Gy_vs_0Gy$res_DESeq
-
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 res_t1_0.5Gy_vs_0Gy <- deresult_to_df(res_t1_0.5Gy_vs_0Gy)
 
 res_t1_0.5Gy_vs_0Gy <- res_t1_0.5Gy_vs_0Gy[!rownames(res_t1_0.5Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
@@ -1542,15 +1296,8 @@ res_t1_0.5Gy_vs_0Gy <- res_t1_0.5Gy_vs_0Gy %>%
 
 # t1_1Gy
 
-<<<<<<< HEAD
 res_t1_1Gy_vs_0Gy <- resuSet$t1_1Gy_vs_0Gy$res_DESeq
 
-=======
-# t1_1Gy
-
-res_t1_1Gy_vs_0Gy <- resuSet$t1_1Gy_vs_0Gy$res_DESeq
-
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 res_t1_1Gy_vs_0Gy <- deresult_to_df(res_t1_1Gy_vs_0Gy)
 
 res_t1_1Gy_vs_0Gy <- res_t1_1Gy_vs_0Gy[!rownames(res_t1_1Gy_vs_0Gy) %in% rownames(ddd_low_var), ]
@@ -1803,10 +1550,7 @@ sample_acts_t2_4Gy <- run_ulm(
 )
 
 sig_sample_acts_t2_4Gy <- sample_acts_t2_4Gy[sample_acts_t2_4Gy$p_value <= 0.05, ]
-<<<<<<< HEAD
 
-=======
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 ```
 
 ## Filter top TFs in both signs
@@ -2012,10 +1756,7 @@ f_sample_acts_t2_4Gy <- f_sample_acts_t2_4Gy %>%
 ## Decoupler heatmap
 
 ```{r}
-<<<<<<< HEAD
 
-=======
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 sample_acts <- run_ulm(
   mat = decoupler_counts,
   net = net,
@@ -2064,7 +1805,6 @@ my_breaks <- c(
 
 # column annotation
 
-<<<<<<< HEAD
 # Extract time point from sample names
 time_point <- ifelse(grepl("2hrs", colnames(sample_acts_mat)), "2hrs", "6hrs")
 
@@ -2075,8 +1815,6 @@ sex <- ifelse(grepl("F$", colnames(sample_acts_mat)), "Female", "Male")
 dose <- sub("-.*", "", colnames(sample_acts_mat))
 
 # Create a data frame for the column annotation
-=======
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 decoupler_column_annotation <- data.frame(Time_Point = time_point, Sex = sex, Dose = dose)
 
 # Plot
@@ -2291,7 +2029,6 @@ saveRDS(Sc_count_matrix, "sc_blood_modified.rds")
 
 # running omnideconv-bayesprism
 
-<<<<<<< HEAD
 #deconv_bayesprism <- omnideconv::deconvolute(
 #  bulk_gene_expression = dds_mat,
 #  single_cell_object = sc_blood_modified,
@@ -2299,15 +2036,6 @@ saveRDS(Sc_count_matrix, "sc_blood_modified.rds")
 #  method = "bayesprism",
 #  n_cores = 12
 #)
-=======
-deconv_bayesprism <- deconvolute(
-  bulk_gene_expression = dds_mat,
-  single_cell_object = sc_blood_modified,
-  cell_type_annotations = Blood_annotation_modified,
-  method = "bayesprism",
-  n_cores = 12
-)
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 
 #omnideconv::plot_deconvolution(list("bayesprism" = deconv_bayesprism), "bar", "method", "Spectral")
 
@@ -2315,46 +2043,11 @@ deconv_bayesprism <- deconvolute(
 #pheatmap(t(deconv_bayesprism[, - c(3,4,6,8,9,10, 15, 16, 18,21,22)]), annotation_col = anno, labels_col = rep(c(1,2,3), 10))
 
 # CIBERSORTx (in web-based tool) was also performed
-<<<<<<< HEAD
 
-=======
-```
-
-# Exporting the data
-
-```{r}
-exportr <- function(resuSet, resu_name = "out_SET") {
-  message("Exporting the whole set for ", resu_name)
-  for (i in names(resuSet)) {
-    message("    ", resu_name, "  ---  ", i)
-    curset <- resuSet[[i]]
-
-    if (!is.null(curset$tbl_res_all)) {
-      message("        Exporting results from DESeq... ")
-      export_deseq_file <- paste0(resu_name, "_", i, "_tbl_res_DESeq.xlsx")
-      writexl::write_xlsx(curset$tbl_res_all, export_deseq_file)
-      message("          ", export_deseq_file)
-    }
-
-    if (!is.null(curset$clupro_tbl)) {
-      message("        Exporting results from clusterProfiler... ")
-      export_clupro_file <- paste0(resu_name, "_", i, "_tbl_cluPro.xlsx")
-      writexl::write_xlsx(curset$clupro_tbl@result, export_clupro_file)
-      message("          ", export_clupro_file)
-    }
-  }
-}
-
-exportr(resuSet = resuSet, resu_name = "Phybion")
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
 ```
 
 # Session information
 
 ```{r sessioninfo}
 sessionInfo()
-<<<<<<< HEAD
 ```
-=======
-```
->>>>>>> 17e2aeb5f2d032ccf9d00afa7469f06617b13875
