@@ -1,5 +1,5 @@
 # Phybion_ShortReads_Analysis
-R markdown for Phybion_ShortReads project
+Analysis pipeline for Phybion_ShortReads project
 ## This RMD includes
 - Exploratory Data Analysis
 - Differential expression analysis with DESeq2
