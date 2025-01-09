@@ -1972,6 +1972,7 @@ is_outlier <- function(SeuratObject, metric, nmads) {
   return(outlier)
 }
 
+#Omnideconv
 
 mito_genes <- grep("^MT-", rownames(seuratObject@assays$RNA@counts), value = TRUE)
 
@@ -2047,6 +2048,7 @@ saveRDS(Sc_count_matrix, "sc_blood_modified.rds")
 #pheatmap(t(deconv_bayesprism[, - c(3,4,6,8,9,10, 15, 16, 18,21,22)]), annotation_col = anno, labels_col = rep(c(1,2,3), 10))
 
 # CIBERSORTx (in web-based tool) was also performed
+
 
 ```
 
