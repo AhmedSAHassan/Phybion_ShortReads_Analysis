@@ -166,7 +166,11 @@ assay(vsd_t2_corrected) <- limma::removeBatchEffect(assay(vsd_phybion_t2), batch
 ## checking read coverage over the samples
 
 ```{r}
-plot_totcounts(dds, group = "Dose")
+plot_coverage<- plot_totcounts(dds, group = "Dose")
+
+ggsave("coverage.png", plot = plot_coverage, width = 8, height = 6, dpi = 400)
+
+
 
 ## PCA plot
 
@@ -174,13 +178,15 @@ pca_plot <- plotPCA(vsd_phybion, intgroup = c("Donors", "Time_point"), returnDat
 
 percentVar <- round(100 * attr(pca_plot, "percentVar"))
 
-ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)) +
+PCA<- ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)) +
   geom_point(size = 3) +
   scale_shape_manual(values = c(16, 17)) + # Adjust the number of shapes if necessary
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
-  theme_minimal()
+  theme_minimal()+
+  theme(plot.background = element_rect(fill = "white", color = NA))
 
+ggsave("PCA_plot.png", plot = PCA, width = 6, height = 4, dpi = 400)
 
 # clustering samples
 
@@ -386,12 +392,14 @@ resuSet <-
 ```{r}
 
 volcPlot <- de_volcano(
-  res_de = resuSet$t2_0.5Gy_vs_0Gy$res_DESeq,
+  res_de = resuSet$t2_vs_t1_0Gy$res_DESeq,
   mapping = "org.Hs.eg.db",
   labeled_genes = 50,
   logfc_cutoff = 1
 )
 volcPlot
+
+ggsave("Volcano.png_t1_0.5.png", plot = volcPlot, width = 8, height = 6, dpi = 400)
 
 ```
 
@@ -509,12 +517,15 @@ plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = 
 ## Checking the gene pattern across doses
 
 ```{r}
-plot_gene_modified(
+gene_plot<- plot_gene_modified(
   dds= list(dds_t1, dds_t2),
-  gene = c("ENSG00000120278"),
+  gene = c("ENSG00000164430"),
   intgroup = "Dose",
   annotation_obj = anno_df,
   plot_titles = c("2h", "6h"))
+
+ggsave("CGAS.png", plot = gene_plot, width = 7, height = 5, dpi = 400)
+
 
 ```
 
@@ -545,6 +556,10 @@ venn.plot_2h <- venn.diagram(
     cex= 2
 )
 
+
+ggsave("venn.plot_2h.png", plot = venn.plot_2h, width = 6, height = 4, dpi = 400)
+
+
 grid::grid.draw(venn.plot_2h)
 
 # 6h post-irradiation
@@ -569,6 +584,8 @@ venn.plot_6h <- venn.diagram(
   margin = 0.05,
   cex= 2
 )
+
+ggsave("venn.plot_6h.png", plot = venn.plot_6h, width = 6, height = 4, dpi = 400)
 
 grid::grid.draw(venn.plot_6h)
 
@@ -783,6 +800,19 @@ for (i in names(resuSet)) {
 
 ```
 
+## CGAS pathway- KEGG
+
+```{r}
+
+entrez_t1_4Gy_vs_0Gy <-bitr(resuSet$t1_4Gy_vs_0Gy$tbl_res_DE$gene_name, 
+     fromType = "SYMBOL",
+     toType = "ENTREZID", OrgDb = org.Hs.eg.db)$ENTREZID
+
+
+pathview(gene.data =entrez_t1_4Gy_vs_0Gy,pathway.id = "hsa04623",species = "hsa", res = 500)
+
+```
+
 # Exporting the data
 
 ```{r}
@@ -935,7 +965,7 @@ gs_summary_overview_pair(shake_res_enrich_t1_4,shake_res_enrich_t2_4, n_gs = 25,
 gs_heatmap(
   se = vsd_corrected_ordred,
   gtl = gtl_t2_0.5Gy,
-  geneset_id = "GO:0008630", anno_col_info = c("Dose", "Sex", "Time_point"), cluster_columns = FALSE, scale_row = T, column_labels = rep(c(1,2,3),10), column_names_rot = 360)
+  geneset_id = "GO:0008630", anno_col_info = c("Dose", "Sex", "Time_point"), cluster_columns = FALSE, scale_row = T, column_labels = rep(c(1,2,3),10), column_names_rot = 360,  plot_title = "Signature heatmap\nIntrinsic apoptotic signaling pathway in response to DNA damage - GO:0008630")
 
 
 # GeneTonic Geneset Heatmap t1_0.5Gy_vs_0Gy
@@ -949,7 +979,7 @@ anno_t1 <- as.data.frame(colData(vsd_phybion_t1)[, c("Sex", "Time_point", "Donor
 anno_full <- as.data.frame(colData(vsd_corrected_ordred)[, c("Sex", "Time_point", "Donors", "Dose")])
 
 
-scored_mat_t1_1Gy_vs_0Gy <- GeneTonic::gs_scores(se = vsd_t1_corrected, gtl = gtl_t1_1Gy)
+scored_mat_t2_0.5Gy_vs_0Gy <- GeneTonic::gs_scores(se = vsd_t2_corrected, gtl = gtl_t2_0.5Gy)
 
 anno_colors <- list(
   Sex = c(Female = "pink", Male = "lightblue"),
@@ -971,19 +1001,19 @@ column_annotation <- HeatmapAnnotation(
 )
 
 
-ht<-Heatmap(scored_mat_t1_1Gy_vs_0Gy[1:15,],
+ht<-Heatmap(scored_mat_t2_0.5Gy_vs_0Gy[1:15,],
   name = "Expression",
-  top_annotation = column_annotation,
+  #top_annotation = column_annotation,
   cluster_columns = F, # Optional: Cluster columns
   cluster_rows = F, # Optional: Cluster rows
   show_row_names = TRUE,
   show_column_names = TRUE, 
   row_dend_side = "left",
-  row_names_side = "left",
-  row_names_gp = gpar(fontsize = 7),
-  width = unit(9, "cm"),
-  heatmap_height = unit(12, "cm"),
-  column_names_gp = gpar(fontsize = 6), 
+  row_names_side = "right",
+  row_names_gp = gpar(fontsize = 6.5),
+  width = unit(7, "cm"),
+  heatmap_height = unit(10.5, "cm"),
+  column_names_gp = gpar(fontsize = 7), 
   column_labels = rep(c(1,2,3),5),
   column_names_rot = 360,
   column_title = "Donors", 
@@ -992,7 +1022,7 @@ ht<-Heatmap(scored_mat_t1_1Gy_vs_0Gy[1:15,],
 )
 
 
-draw(ht)
+draw(ht,  heatmap_legend_side = "right" )
 
 # OR
 
@@ -1018,7 +1048,7 @@ color_by = "p.adjust"
 )
 
 
-visNetwork::visIgraph(emap_graph) %>%
+graph <-visNetwork::visIgraph(emap_graph) %>%
   visOptions(
     highlightNearest = list(
       enabled = TRUE,
@@ -1033,6 +1063,13 @@ visNetwork::visIgraph(emap_graph) %>%
     label = "Save enrichment map"
   
   )
+
+saveWidget(graph, "emap_graph.html")
+
+library(webshot)
+
+# Save as PNG with 400 DPI
+webshot("emap_graph.html", "emap_graph.png", zoom = 2)
 
 ```
 
@@ -1110,6 +1147,9 @@ p2 <- gseaplot(em2,
 )
 
 p1 / p2
+
+ggsave("GSEA.png", plot = p1 / p2, width = 7, height = 6, dpi = 400)
+
 
 ```
 
@@ -2044,7 +2084,9 @@ saveRDS(Sc_count_matrix, "sc_blood_modified.rds")
 
 #omnideconv::plot_deconvolution(list("bayesprism" = deconv_bayesprism), "bar", "method", "Spectral")
 
-pheatmap(t(deconv_bayesprism[, - c(3,4,6,8,9,10, 15, 16, 18,21,22)]), annotation_col = column_annotation, labels_col = rep(c(1,2,3), 10), display_numbers = TRUE, number_format = "%.2f")
+column_annotation <- data.frame(Time_Point = time_point, Sex = sex, Dose = dose)
+
+pheatmap(t(deconv_bayesprism[, - c(3,4,6,8,9,10, 15, 16, 18,21,22)]), annotation_col = column_annotation, labels_col = rep(c(1,2,3), 10), display_numbers = TRUE, number_format = "%.2f", annotation_colors = anno_colors, angle_col = "0")
 
 # CIBERSORTx (in web-based tool) was also performed
 
