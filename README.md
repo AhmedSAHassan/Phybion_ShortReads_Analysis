@@ -1,4 +1,4 @@
-# Phybion_ShortReads_Analysis
+# PhyBioN_ShortReads_Analysis
 Analysis pipeline for Phybion_ShortReads project
 ## Experimental design
 
