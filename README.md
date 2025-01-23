@@ -14,5 +14,7 @@ Blood samples from 3 healthy donors (2 males and 1 female) were exposed to X-ray
 - GeneSet Variation Analysis
 - Differential Expression Analysis at the pathway level with Limma
 
+## License
+This project is licensed under the [MIT License](LICENSE).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
