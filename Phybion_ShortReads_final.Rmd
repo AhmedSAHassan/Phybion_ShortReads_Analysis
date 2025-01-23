@@ -100,7 +100,7 @@ library("rstanarm")
 library("meta")
 ```
 
-#Exploratory Data Analysis (EDA)
+  #Exploratory Data Analysis (EDA)
 
 ```{r}
 # Loading the data
@@ -109,6 +109,8 @@ gse <- readRDS("gse_phybion_ShortReads.RDS")
 
 
 dds <- DESeqDataSet(gse, design = ~ Donors + Dose)
+
+# ordering the samples
 
 dds <- dds[, c(
   "0Gy-2hrs-F", "0Gy-2hrs-A", "0Gy-2hrs-S", "0Gy-6hrs-F", "0Gy-6hrs-A",
@@ -166,6 +168,7 @@ assay(vsd_t2_corrected) <- limma::removeBatchEffect(assay(vsd_phybion_t2), batch
 ## checking read coverage over the samples
 
 ```{r}
+
 plot_coverage<- plot_totcounts(dds, group = "Dose")
 
 ggsave("coverage.png", plot = plot_coverage, width = 8, height = 6, dpi = 400)
@@ -184,7 +187,17 @@ PCA<- ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
   theme_minimal()+
-  theme(plot.background = element_rect(fill = "white", color = NA))
+  theme(plot.background = element_rect(fill = "white", color = NA))+ theme_bw() +
+    theme(
+       axis.title.x=element_text(size=rel(1.6)),
+        axis.title.y=element_text(size=rel(1.6)),
+        axis.text.x=element_text(size=rel(1.6)),
+        axis.text.y=element_text(size=rel(1.6)),
+        strip.text.x=element_text(size=rel(1.6)),
+        strip.text.y=element_text(size=rel(1.6)),
+        legend.text=element_text(size=rel(1.4)),
+        legend.title=element_text(size=rel(1.4)),
+        plot.title=element_text(size=rel(1.6)))
 
 ggsave("PCA_plot.png", plot = PCA, width = 6, height = 4, dpi = 400)
 
@@ -519,12 +532,22 @@ plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = 
 ```{r}
 gene_plot<- plot_gene_modified(
   dds= list(dds_t1, dds_t2),
-  gene = c("ENSG00000164430"),
+  gene = c("ENSG00000167483"),
   intgroup = "Dose",
   annotation_obj = anno_df,
-  plot_titles = c("2h", "6h"))
+  plot_titles = c("2h", "6h"))+theme_bw() +
+    theme(
+       axis.title.x=element_text(size=rel(1.6)),
+        axis.title.y=element_text(size=rel(1.6)),
+        axis.text.x=element_text(size=rel(1.6)),
+        axis.text.y=element_text(size=rel(1.6)),
+        strip.text.x=element_text(size=rel(1.6)),
+        strip.text.y=element_text(size=rel(1.6)),
+        legend.text=element_text(size=rel(1.4)),
+        legend.title=element_text(size=rel(1.4)),
+        plot.title=element_text(size=rel(1.6)))
 
-ggsave("CGAS.png", plot = gene_plot, width = 7, height = 5, dpi = 400)
+ggsave("NIBAN3.png", plot = gene_plot, width = 6, height = 4, dpi = 400)
 
 
 ```
@@ -555,7 +578,6 @@ venn.plot_2h <- venn.diagram(
   margin = 0.05,
     cex= 2
 )
-
 
 ggsave("venn.plot_2h.png", plot = venn.plot_2h, width = 6, height = 4, dpi = 400)
 
@@ -594,6 +616,7 @@ grid::grid.draw(venn.plot_6h)
 ## since we spotted time effect on non-irradiated samples, DEA to capture radiation-only late effect would be as such
 
 ```{r}
+
 design(dds) <- ~ Donors + Time_point + Dose + Time_point:Dose
 
 dds <- DESeq(dds)
@@ -655,6 +678,25 @@ res_shrink_2Gy_time2_vs_time1 <- lfcShrink(dds,
 summary(res_shrink_2Gy_time2_vs_time1)
 
 res_shrink_2Gy_time2_vs_time1 <- deresult_to_df(res_shrink_2Gy_time2_vs_time1, FDR = 0.05)
+
+
+# 1Gy t2 Vs 0.5Gy t1
+
+res_1Gy_time2_vs_time1 <- results(dds,
+  name = "Time_point6hrs.Dose1Gy",
+  test = "Wald",
+  alpha = 0.05
+)
+
+res_shrink_1Gy_time2_vs_time1 <- lfcShrink(dds,
+  res = res_1Gy_time2_vs_time1,
+  coef = "Time_point6hrs.Dose1Gy",
+  type = "apeglm"
+)
+
+summary(res_shrink_1Gy_time2_vs_time1)
+
+res_shrink_1Gy_time2_vs_time1 <- deresult_to_df(res_shrink_1Gy_time2_vs_time1, FDR = 0.05)
 
 # 0.5Gy t2 Vs 0.5Gy t1
 
