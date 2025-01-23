@@ -4,7 +4,7 @@ Analysis pipeline for Phybion_ShortReads project
 
 Blood samples from 3 healthy donors (2 males and 1 female) were exposed to X-ray irradiation of 0.5, 1, 2, and 4 Gy, and incubated for 2 h and 6 h post-irradiation. Sham-irradiated (0 Gy) controls were maintained under identical conditions in the control room.
 
-## This RMD includes
+## The RMD file includes
 - Exploratory Data Analysis
 - Differential expression analysis with DESeq2
 - Functional Enrichment Analysis with ClusterProfiler
