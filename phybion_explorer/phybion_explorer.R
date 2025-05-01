@@ -6,6 +6,10 @@ library("DESeq2")
 library("mosdef")
 library("dplyr")
 library("GeneTonic")
+library("shinythemes")
+library("shinycssloaders")
+library("plotly")
+library("patchwork")
 
 dds_phybion <- readRDS("PhyBioN_SR_Analysis/dds.RDS")
 dds_phybion <- estimateSizeFactors(dds_phybion)
@@ -20,106 +24,67 @@ anno_df <- mosdef::get_annotation_orgdb(dds_phybion, "org.Hs.eg.db", id_type = "
 
 # defining helper functions -----------------------------------------------
 
-plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = "counts",
-                                annotation_obj = NULL, normalized = TRUE, transform = TRUE,
-                                labels_display = FALSE, labels_repel = TRUE, plot_type = "auto",
-                                return_data = FALSE, color_by = "Donors", plot_titles = NULL) {
-  plot_type <- match.arg(plot_type, c("auto", "jitteronly", "boxplot", "violin", "sina"))
-
-  # Ensure plot_titles matches the length of dds_list
+plot_gene_modified <- function(dds_list, genes, intgroup = "condition", assay = "counts",
+                               annotation_obj = NULL, normalized = TRUE, transform = TRUE,
+                               color_by = "Donors", plot_titles = c("2hrs", "6hrs")) {
+  
   if (!is.null(plot_titles) && length(plot_titles) != length(dds_list)) {
     stop("The length of `plot_titles` must match the number of elements in `dds_list`.")
   }
-
-  # Collect data from both dds objects
+  
   df_list <- lapply(seq_along(dds_list), function(i) {
     dds <- dds_list[[i]]
-    if (!(all(intgroup %in% colnames(colData(dds))))) {
-      stop("`intgroup` not found in the colData slot of the dds object for dds ", i)
-    }
-
-    df <- get_expression_values(dds = dds, gene = gene, intgroup = intgroup,
-                                assay = assay, normalized = normalized)
-    df$sample_id <- rownames(df)
-
-    # Use custom titles if provided
-    df$source <- if (!is.null(plot_titles)) {
-      plot_titles[i]
-    } else {
-      paste0("dds_", i)  # Default identifier for the dds object
-    }
-
-    # Add Donors column if it exists
-    if ("Donors" %in% colnames(colData(dds))) {
-      df$Donors <- colData(dds)[, "Donors"]
-    } else {
-      stop("The `Donors` column is missing in the colData of the dds object for dds ", i)
-    }
-
-    return(df)
+    
+    data_list <- lapply(genes, function(gene) {
+      df <- get_expression_values(dds = dds, gene = gene, intgroup = intgroup,
+                                  assay = assay, normalized = normalized)
+      df$sample_id <- rownames(df)
+      df$gene_id <- gene
+      df$source <- plot_titles[i]
+      
+      if (color_by %in% colnames(colData(dds))) {
+        df[[color_by]] <- colData(dds)[, color_by]
+      } else {
+        df[[color_by]] <- NA
+      }
+      
+      return(df)
+    })
+    
+    bind_rows(data_list)
   })
+  
   df <- bind_rows(df_list)
-
-  # Add gene annotation if provided
+  df$plotby <- interaction(df[[intgroup]])
+  
   if (!is.null(annotation_obj)) {
-    genesymbol <- annotation_obj$gene_name[match(gene, annotation_obj$gene_id)]
+    df$gene_name <- annotation_obj$gene_name[match(df$gene_id, annotation_obj$gene_id)]
   } else {
-    genesymbol <- gene
+    df$gene_name <- df$gene_id
   }
-
-  onlyfactors <- df[, match(intgroup, colnames(df))]
-  df$plotby <- interaction(onlyfactors)
-  min_by_groups <- min(table(df$plotby))
-
-  if (return_data) {
-    return(df)
-  }
-
-  # Create ggplot
-  p <- ggplot(df, aes(x = .data$plotby, y = .data$exp_value, col = .data[[color_by]])) +
-    scale_x_discrete(name = "") +
-    scale_color_discrete(name = "Experimental\ngroup") +
-    theme_bw() +
-    facet_wrap(~source, scales = "fixed")  # Use custom titles for facets
-
-  jit_pos <- position_jitter(width = 0.2, height = 0, seed = 42)
-
-  # Plot individual points for samples/donors
-  p <- p + geom_point(position = jit_pos, shape = 16, size = 3)
-
-  # Display labels if required
-  if (labels_display) {
-    if (labels_repel) {
-      p <- p + ggrepel::geom_text_repel(aes(label = .data$sample_id),
-                                        min.segment.length = 0, position = jit_pos)
-    } else {
-      p <- p + geom_text(aes(label = .data$sample_id), hjust = -0.1, vjust = 0.1, position = jit_pos)
-    }
-  }
-
-  # Add a connected mean line across all groups
-  p <- p + stat_summary(fun = mean, geom = "line", aes(group = 1),
-                        color = "grey80", linewidth = 0.8)
-
-  y_label <- if (assay == "counts" & normalized) {
-    "Normalized counts"
-  } else if (assay == "counts" & !normalized) {
-    "Counts"
-  } else if (assay == "abundance") {
-    "TPM - Transcripts Per Million"
-  } else {
-    assay
-  }
-
-  if (transform) {
-    p <- p + scale_y_log10(name = paste0(y_label, " (log10 scale)"))
-  } else {
-    p <- p + scale_y_continuous(name = y_label)
-  }
-
-  p <- p + labs(title = paste0(genesymbol, " - ", gene))
-
-  return(p)
+  
+  plots <- lapply(unique(df$gene_name), function(gene_name) {
+    gene_df <- df[df$gene_name == gene_name, ]
+    
+    ggplot(gene_df, aes(x = .data$plotby, y = .data$exp_value, color = .data[[color_by]],
+                        group = .data$source,
+                        text = paste0("Sample: ", sample_id,
+                                      "<br>Value: ", round(exp_value, 2),
+                                      "<br>Time: ", source,
+                                      "<br>Dose: ", .data$plotby))) +
+      geom_point(position = position_jitter(width = 0.2), shape = 16, size = 3, alpha = 0.8) +
+      stat_summary(fun = mean, geom = "line", aes(group = source), color = "grey70", linewidth = 1) +
+      facet_wrap(~source) +
+      theme_minimal(base_size = 14) +
+      labs(title = gene_name, x = "", y = ifelse(transform, "Normalized counts (log10)", "Normalized counts"),
+           color = color_by) +
+      scale_color_brewer(palette = "Set2") +
+      {
+        if (transform) scale_y_log10() else scale_y_continuous()
+      }
+  })
+  
+  return(plots)
 }
 
 
@@ -128,19 +93,28 @@ plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = 
 ## ui definition ---------------------------------------------------------------
 
 phybion_ui <- fluidPage(
-
+  theme = shinytheme("flatly"),
   # Application title
-  titlePanel("Exploring the Phybion dataset"),
+  titlePanel(div(
+    h2("📈 Exploring Gene Dynamics in Response to X-ray"),
+    p("Visualize normalized expression across doses and timepoints."),
+    style = "margin-bottom: 20px"
+  )),
 
   # Sidebar with input element(s)
   sidebarLayout(
     sidebarPanel(
-      selectizeInput("gene_name", label = "select a gene", choices = NULL, selected = "FDXR")
+      wellPanel(
+        selectizeInput("gene_name", label = "Select gene(s)", choices = NULL, 
+                       selected = c("FDXR"), multiple = TRUE),
+        selectInput("color_by", label = "Color by", choices = c("Sex", "Donors", "Dose")),
+        downloadButton("download_plot", "Download Plot"),
+        uiOutput("genecard_links")
+      )
     ),
-
-    # Show a plot of the gene selected
+    
     mainPanel(
-      plotOutput("gene_plot")
+      withSpinner(uiOutput("dynamic_plot_ui"), type = 4)
     )
   )
 )
@@ -159,21 +133,65 @@ phybion_server <- function(input, output, session) {
     )
   })
 
-  output$gene_plot <- renderPlot({
-    # check that something is selected, otherwise "throw a gentle error message"
-    validate(
-      need({input$gene_name != ""}, message = "Please select a gene")
+  # Store ggplot objects
+  gene_plot_data <- reactive({
+    req(input$gene_name)
+    
+    gene_ids <- anno_df$gene_id[match(input$gene_name, anno_df$gene_name)]
+    
+    plot_gene_modified(
+      dds_list = dds_list,
+      genes = gene_ids,
+      intgroup = "Dose",
+      annotation_obj = anno_df,
+      color_by = input$color_by
     )
-
-    # fetch the gene id "again"
-    gene_id <- anno_df$gene_id[match(input$gene_name, anno_df$gene_name)]
-
-    p <- plot_gene_modified(dds_list,
-                            intgroup = "Dose",
-                            gene = gene_id,
-                            annotation_obj = anno_df,
-                            plot_titles = c("2h", "6h"))
-    p
+  })
+  
+  
+  gene_plots <- reactive({
+    lapply(gene_plot_data(), ggplotly, tooltip = "text")
+  })
+  
+  output$dynamic_plot_ui <- renderUI({
+    req(input$gene_name)
+    plot_ids <- seq_along(input$gene_name)
+    
+    plot_outputs <- lapply(plot_ids, function(i) {
+      plotlyOutput(outputId = paste0("gene_plot_", i), height = "500px")
+    })
+    
+    do.call(tagList, plot_outputs)
+  })
+  
+  observe({
+    req(input$gene_name)
+    plots <- gene_plots()
+    
+    lapply(seq_along(plots), function(i) {
+      output[[paste0("gene_plot_", i)]] <- renderPlotly({
+        plots[[i]]
+      })
+    })
+  })
+  
+  output$download_plot <- downloadHandler(
+    filename = function() {
+      paste0(paste(input$gene_name, collapse = "_"), "_expression_plot.png")
+    },
+    content = function(file) {
+      ggsave(file, plot = wrap_plots(gene_plot_data(), ncol = 1), 
+             device = "png", width = 12, height = 4 * length(input$gene_name))
+    }
+  )
+  
+  output$genecard_links <- renderUI({
+    req(input$gene_name)
+    links <- lapply(input$gene_name, function(gene) {
+      gene_link <- paste0("https://www.genecards.org/cgi-bin/carddisp.pl?gene=", gene)
+      tags$a(href = gene_link, target = "_blank", paste("GeneCard:", gene))
+    })
+    tagList(tags$h5("GeneCards Links:"), tags$ul(lapply(links, tags$li)))
   })
 }
 
