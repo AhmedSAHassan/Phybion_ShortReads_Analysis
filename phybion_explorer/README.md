@@ -14,6 +14,6 @@ This Shiny application provides an interactive interface for exploring gene expr
 
 ## 🚀 How to Run
 
-- open the phybion_explorer.R file
-- if required, install the dependencies
-- run the app by executing the content of the app script
+- Open the phybion_explorer.R file
+- If required, install the dependencies
+- Run the app by executing the content of the app script
