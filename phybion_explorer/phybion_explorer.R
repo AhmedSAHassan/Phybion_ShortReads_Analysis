@@ -27,45 +27,45 @@ anno_df <- mosdef::get_annotation_orgdb(dds_phybion, "org.Hs.eg.db", id_type = "
 plot_gene_modified <- function(dds_list, genes, intgroup = "condition", assay = "counts",
                                annotation_obj = NULL, normalized = TRUE, transform = TRUE,
                                color_by = "Donors", plot_titles = c("2hrs", "6hrs")) {
-  
+
   if (!is.null(plot_titles) && length(plot_titles) != length(dds_list)) {
     stop("The length of `plot_titles` must match the number of elements in `dds_list`.")
   }
-  
+
   df_list <- lapply(seq_along(dds_list), function(i) {
     dds <- dds_list[[i]]
-    
+
     data_list <- lapply(genes, function(gene) {
-      df <- get_expression_values(dds = dds, gene = gene, intgroup = intgroup,
-                                  assay = assay, normalized = normalized)
+      df <- mosdef::get_expr_values(de_container = dds, gene = gene, intgroup = intgroup,
+                                    assay = assay, normalized = normalized)
       df$sample_id <- rownames(df)
       df$gene_id <- gene
       df$source <- plot_titles[i]
-      
+
       if (color_by %in% colnames(colData(dds))) {
         df[[color_by]] <- colData(dds)[, color_by]
       } else {
         df[[color_by]] <- NA
       }
-      
+
       return(df)
     })
-    
+
     bind_rows(data_list)
   })
-  
+
   df <- bind_rows(df_list)
   df$plotby <- interaction(df[[intgroup]])
-  
+
   if (!is.null(annotation_obj)) {
     df$gene_name <- annotation_obj$gene_name[match(df$gene_id, annotation_obj$gene_id)]
   } else {
     df$gene_name <- df$gene_id
   }
-  
+
   plots <- lapply(unique(df$gene_name), function(gene_name) {
     gene_df <- df[df$gene_name == gene_name, ]
-    
+
     ggplot(gene_df, aes(x = .data$plotby, y = .data$exp_value, color = .data[[color_by]],
                         group = .data$source,
                         text = paste0("Sample: ", sample_id,
@@ -83,7 +83,7 @@ plot_gene_modified <- function(dds_list, genes, intgroup = "condition", assay = 
         if (transform) scale_y_log10() else scale_y_continuous()
       }
   })
-  
+
   return(plots)
 }
 
@@ -97,7 +97,6 @@ phybion_ui <- fluidPage(
   # Application title
   titlePanel(div(
     h2("📈 Exploring Gene Dynamics in Response to X-ray"),
-    p("Visualize normalized expression across doses and timepoints."),
     style = "margin-bottom: 20px"
   )),
 
@@ -105,15 +104,16 @@ phybion_ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       wellPanel(
-        selectizeInput("gene_name", label = "Select gene(s)", choices = NULL, 
-                       selected = c("FDXR"), multiple = TRUE),
+        selectizeInput("gene_name", label = "Select gene(s)", choices = NULL,
+                       selected = c("FDXR", "MDM2", "TICAM1", "NFKBIZ"), multiple = TRUE),
         selectInput("color_by", label = "Color by", choices = c("Sex", "Donors", "Dose")),
         downloadButton("download_plot", "Download Plot"),
         uiOutput("genecard_links")
       )
     ),
-    
+
     mainPanel(
+      h4("Here you can visualize normalized expression across doses and timepoints."),
       withSpinner(uiOutput("dynamic_plot_ui"), type = 4)
     )
   )
@@ -128,7 +128,7 @@ phybion_server <- function(input, output, session) {
       session = session,
       inputId = "gene_name",
       choices = c(Choose = "", anno_df$gene_name),
-      selected = "FDXR",
+      selected = c("FDXR", "MDM2", "TICAM1", "NFKBIZ"),
       server = TRUE
     )
   })
@@ -136,9 +136,9 @@ phybion_server <- function(input, output, session) {
   # Store ggplot objects
   gene_plot_data <- reactive({
     req(input$gene_name)
-    
+
     gene_ids <- anno_df$gene_id[match(input$gene_name, anno_df$gene_name)]
-    
+
     plot_gene_modified(
       dds_list = dds_list,
       genes = gene_ids,
@@ -147,49 +147,49 @@ phybion_server <- function(input, output, session) {
       color_by = input$color_by
     )
   })
-  
-  
+
+
   gene_plots <- reactive({
     lapply(gene_plot_data(), ggplotly, tooltip = "text")
   })
-  
+
   output$dynamic_plot_ui <- renderUI({
     req(input$gene_name)
     plot_ids <- seq_along(input$gene_name)
-    
+
     plot_outputs <- lapply(plot_ids, function(i) {
       plotlyOutput(outputId = paste0("gene_plot_", i), height = "500px")
     })
-    
+
     do.call(tagList, plot_outputs)
   })
-  
+
   observe({
     req(input$gene_name)
     plots <- gene_plots()
-    
+
     lapply(seq_along(plots), function(i) {
       output[[paste0("gene_plot_", i)]] <- renderPlotly({
         plots[[i]]
       })
     })
   })
-  
+
   output$download_plot <- downloadHandler(
     filename = function() {
       paste0(paste(input$gene_name, collapse = "_"), "_expression_plot.png")
     },
     content = function(file) {
-      ggsave(file, plot = wrap_plots(gene_plot_data(), ncol = 1), 
+      ggsave(file, plot = wrap_plots(gene_plot_data(), ncol = 1),
              device = "png", width = 12, height = 4 * length(input$gene_name))
     }
   )
-  
+
   output$genecard_links <- renderUI({
     req(input$gene_name)
     links <- lapply(input$gene_name, function(gene) {
       gene_link <- paste0("https://www.genecards.org/cgi-bin/carddisp.pl?gene=", gene)
-      tags$a(href = gene_link, target = "_blank", paste("GeneCard:", gene))
+      tags$a(href = gene_link, target = "_blank", paste("GeneCards:", gene))
     })
     tagList(tags$h5("GeneCards Links:"), tags$ul(lapply(links, tags$li)))
   })
@@ -197,3 +197,4 @@ phybion_server <- function(input, output, session) {
 
 # run the application ----------------------------------------------------------
 shinyApp(ui = phybion_ui, server = phybion_server)
+
