@@ -105,7 +105,7 @@ phybion_ui <- fluidPage(
     sidebarPanel(
       wellPanel(
         selectizeInput("gene_name", label = "Select gene(s)", choices = NULL,
-                       selected = c("FDXR", "MDM2", "TICAM1", "NFKBIZ"), multiple = TRUE),
+                       selected = c("FDXR", "MDM2", "TICAM1", "NFKBIZ", "GPN1", "PMAIP1"), multiple = TRUE),
         selectInput("color_by", label = "Color by", choices = c("Sex", "Donors", "Dose")),
         downloadButton("download_plot", "Download Plot"),
         uiOutput("genecard_links")
@@ -128,7 +128,7 @@ phybion_server <- function(input, output, session) {
       session = session,
       inputId = "gene_name",
       choices = c(Choose = "", anno_df$gene_name),
-      selected = c("FDXR", "MDM2", "TICAM1", "NFKBIZ"),
+      selected = c("FDXR", "MDM2", "TICAM1", "NFKBIZ", "GPN1", "PMAIP1"),
       server = TRUE
     )
   })
