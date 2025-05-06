@@ -94,6 +94,7 @@ plot_gene_modified <- function(dds_list, genes, intgroup = "condition", assay = 
 
 phybion_ui <- fluidPage(
   theme = shinytheme("flatly"),
+  title = "phybion_explorer: Exploring Gene Dynamics in Response to X-ray",
   # Application title
   titlePanel(div(
     h2("📈 Exploring Gene Dynamics in Response to X-ray"),
