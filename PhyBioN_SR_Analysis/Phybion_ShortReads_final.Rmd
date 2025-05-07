@@ -1922,6 +1922,13 @@ attributes(E(myg))
 
 E(myg)$mor <- snet$mor
 E(myg)$color <- c("blue", "red")[factor(E(myg)$mor, levels = c(-1, 1))]
+
+V(myg)$size <- 30
+
+V(myg)$label.cex <- 1
+
+E(myg)$width <- 5
+
 visIgraph(myg)
 
 
