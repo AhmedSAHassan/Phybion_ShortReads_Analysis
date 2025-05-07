@@ -105,7 +105,7 @@ library("meta")
 ```{r}
 # Loading the data
 
-gse <- readRDS("gse_phybion_ShortReads.RDS")
+gse <- readRDS("gse_PhyBioN_Pseudonymized.RDS")
 
 
 dds <- DESeqDataSet(gse, design = ~ Donors + Dose)
