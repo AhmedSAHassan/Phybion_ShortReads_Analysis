@@ -105,10 +105,11 @@ library("meta")
 ```{r}
 # Loading the data
 
-gse <- readRDS("gse_PhyBioN_Pseudonymized.RDS")
-
+gse <- readRDS("PhyBioN_SR_Analysis/gse_PhyBioN_Pseudonymized.RDS")
 
 dds <- DESeqDataSet(gse, design = ~ Donors + Dose)
+
+dds<- DESeq(dds)
 
 # ordering the samples
 
@@ -227,9 +228,9 @@ pheatmap(sampleDistMatrix,
 # Annotations for the whole experiment
 
 anno_df <- get_annotation_orgdb(
-  dds = dds,
-  orgdb_species = "org.Hs.eg.db",
-  idtype = "ENSEMBL"
+  de_container =  dds,
+  orgdb_package = "org.Hs.eg.db",
+  id_type = "ENSEMBL"
 )
 
 mart <- useMart(biomart = "ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl")
@@ -983,25 +984,28 @@ anno_full <- as.data.frame(colData(vsd_corrected_ordred)[, c("Sex", "Time_point"
 
 scored_mat_t2_0.5Gy_vs_0Gy <- GeneTonic::gs_scores(se = vsd_t2_corrected, gtl = gtl_t2_0.5Gy)
 
+#column annotations colors
+
+dose_colors <- colorRampPalette(c("lightyellow", "gold", "orange", "red"))(5)
+names(dose_colors)<- c("0Gy", "0.5Gy", "1Gy", "2Gy", "4Gy")
+
 anno_colors <- list(
-  Sex = c(Female = "pink", Male = "lightblue"),
-  Dose = c(
-    "0Gy" = "green",
-    "0.5Gy" = "orange",
-    "1Gy" = "purple",
-    "2Gy" = "blue",
-    "4Gy" = "red"
-  )
+  Sex = c(Female = "pink", Male = "blue"),
+  Dose = dose_colors
 )
 
 
 column_annotation <- HeatmapAnnotation(
   Sex = anno_t1$Sex,
   Dose = anno_t1$Dose,
-  # Time = anno_t1$Time_point,
-  col = anno_colors, show_legend = TRUE
+  #Time = anno_t1$Time_point,
+  col = anno_colors, show_legend = T
 )
 
+col_fun <- colorRamp2(
+  c(-2, 0, 2), 
+  c("blue", "white", "red")
+)
 
 ht <- Heatmap(scored_mat_t2_0.5Gy_vs_0Gy[1:15, ],
   name = "Expression",
@@ -1061,6 +1065,8 @@ graph <- visNetwork::visIgraph(emap_graph) %>%
     type = "png",
     label = "Save enrichment map"
   )
+
+graph 
 
 saveWidget(graph, "emap_graph.html")
 
@@ -1163,7 +1169,7 @@ genes_exprs_mat <- mapIds(
 
 rownames(exprs_mat) <- genes_exprs_mat
 
-goannot <- select(org.Hs.eg.db, keys = keys(org.Hs.eg.db, "SYMBOL"), columns = "GOALL", keytype = "SYMBOL")
+goannot <- AnnotationDbi::select(org.Hs.eg.db, keys = keys(org.Hs.eg.db, "SYMBOL"), columns = "GOALL", keytype = "SYMBOL")
 
 genesbygo <- split(goannot$SYMBOL, goannot$GO)
 
