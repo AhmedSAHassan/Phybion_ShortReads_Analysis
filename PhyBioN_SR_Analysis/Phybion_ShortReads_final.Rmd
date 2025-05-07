@@ -105,10 +105,11 @@ library("meta")
 ```{r}
 # Loading the data
 
-gse <- readRDS("gse_phybion_ShortReads.RDS")
-
+gse <- readRDS("PhyBioN_SR_Analysis/gse_PhyBioN_Pseudonymized.RDS")
 
 dds <- DESeqDataSet(gse, design = ~ Donors + Dose)
+
+dds<- DESeq(dds)
 
 # ordering the samples
 
@@ -140,7 +141,6 @@ dds_t1$Dose <- relevel(dds_t1$Dose, "0Gy")
 dds_t2$Dose <- relevel(dds_t2$Dose, "0Gy")
 
 dds_0Gy <- dds[, dds$Dose == "0Gy"]
-
 ```
 
 ## Variance stablizing transformation
@@ -162,14 +162,12 @@ assay(vsd_t1_corrected) <- limma::removeBatchEffect(assay(vsd_phybion_t1), batch
 
 vsd_t2_corrected <- vsd_phybion_t2
 assay(vsd_t2_corrected) <- limma::removeBatchEffect(assay(vsd_phybion_t2), batch = vsd_phybion_t2$Donors)
-
 ```
 
 ## checking read coverage over the samples
 
 ```{r}
-
-plot_coverage<- plot_totcounts(dds, group = "Dose")+ggpt
+plot_coverage <- plot_totcounts(dds, group = "Dose") + ggpt
 
 ggsave("coverage.png", plot = plot_coverage, width = 11, height = 8, dpi = 400)
 
@@ -181,13 +179,14 @@ pca_plot <- plotPCA(vsd_phybion, intgroup = c("Donors", "Time_point"), returnDat
 
 percentVar <- round(100 * attr(pca_plot, "percentVar"))
 
-PCA<- ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)) +
+PCA <- ggplot(pca_plot, aes(x = PC1, y = PC2, color = Donors, shape = Time_point)) +
   geom_point(size = 3) +
   scale_shape_manual(values = c(16, 17)) + # Adjust the number of shapes if necessary
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
-  theme_minimal()+
-  theme(plot.background = element_rect(fill = "white", color = NA))+ ggpt
+  theme_minimal() +
+  theme(plot.background = element_rect(fill = "white", color = NA)) +
+  ggpt
 
 ggsave("PCA_plot.png", plot = PCA, width = 9, height = 6, dpi = 400)
 
@@ -220,7 +219,6 @@ pheatmap(sampleDistMatrix,
   clustering_distance_cols = sampleDists, annotation_col = column_annotation,
   col = colors
 )
-
 ```
 
 # Annotations
@@ -230,9 +228,9 @@ pheatmap(sampleDistMatrix,
 # Annotations for the whole experiment
 
 anno_df <- get_annotation_orgdb(
-  dds = dds,
-  orgdb_species = "org.Hs.eg.db",
-  idtype = "ENSEMBL"
+  de_container =  dds,
+  orgdb_package = "org.Hs.eg.db",
+  id_type = "ENSEMBL"
 )
 
 mart <- useMart(biomart = "ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl")
@@ -243,7 +241,6 @@ anns <- getBM(
   values = rownames(dds),
   mart = mart
 )
-
 ```
 
 # Differential expression analysis
@@ -385,67 +382,62 @@ resuSet <-
     species = "Homo_sapiens",
     name_res_entry = "t2_vs_t1_0Gy"
   )
-
-
-
 ```
 
 ## Volcano plot
 
 ```{r}
-
 volcPlot <- de_volcano(
   res_de = resuSet$t2_vs_t1_0Gy$res_DESeq,
   mapping = "org.Hs.eg.db",
   labeled_genes = 50,
   logfc_cutoff = 1
-)+ggpt
+) + ggpt
 
 ggsave("Volcano_0Gy.png", plot = volcPlot, width = 8, height = 6, dpi = 400)
-
 ```
 
 ## Creating gene plotting function
 
 ```{r}
-
-plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = "counts", 
-                                annotation_obj = NULL, normalized = TRUE, transform = TRUE, 
-                                labels_display = FALSE, labels_repel = TRUE, plot_type = "auto", 
-                                return_data = FALSE, color_by = "Donors", plot_titles = NULL) 
-{
+plot_gene_modified <- function(dds_list, gene, intgroup = "condition", assay = "counts",
+                               annotation_obj = NULL, normalized = TRUE, transform = TRUE,
+                               labels_display = FALSE, labels_repel = TRUE, plot_type = "auto",
+                               return_data = FALSE, color_by = "Donors", plot_titles = NULL) {
   plot_type <- match.arg(plot_type, c("auto", "jitteronly", "boxplot", "violin", "sina"))
-  
+
   # Ensure plot_titles matches the length of dds_list
   if (!is.null(plot_titles) && length(plot_titles) != length(dds_list)) {
     stop("The length of `plot_titles` must match the number of elements in `dds_list`.")
   }
-  
+
   # Collect data from both dds objects
   df_list <- lapply(seq_along(dds_list), function(i) {
     dds <- dds_list[[i]]
     if (!(all(intgroup %in% colnames(colData(dds))))) {
       stop("`intgroup` not found in the colData slot of the dds object for dds ", i)
     }
-    
-    df <- get_expression_values(dds = dds, gene = gene, intgroup = intgroup, 
-                                assay = assay, normalized = normalized)
+
+    df <- get_expression_values(
+      dds = dds, gene = gene, intgroup = intgroup,
+      assay = assay, normalized = normalized
+    )
     df$sample_id <- rownames(df)
-    
+
     # Use custom titles if provided
     df$source <- if (!is.null(plot_titles)) {
       plot_titles[i]
     } else {
-      paste0("dds_", i)  # Default identifier for the dds object
+      paste0("dds_", i) # Default identifier for the dds object
     }
-    
+
     # Add Donors column if it exists
     if ("Donors" %in% colnames(colData(dds))) {
       df$Donors <- colData(dds)[, "Donors"]
     } else {
       stop("The `Donors` column is missing in the colData of the dds object for dds ", i)
     }
-    
+
     return(df)
   })
   df <- bind_rows(df_list)
@@ -466,30 +458,33 @@ plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = 
   }
 
   # Create ggplot
-  p <- ggplot(df, aes(x = .data$plotby, y = .data$exp_value, col = .data[[color_by]])) + 
-    scale_x_discrete(name = "") + 
-    scale_color_discrete(name = "Experimental\ngroup") + 
-    theme_bw() + 
-    facet_wrap(~source, scales = "fixed")  # Use custom titles for facets
-  
+  p <- ggplot(df, aes(x = .data$plotby, y = .data$exp_value, col = .data[[color_by]])) +
+    scale_x_discrete(name = "") +
+    scale_color_discrete(name = "Experimental\ngroup") +
+    theme_bw() +
+    facet_wrap(~source, scales = "fixed") # Use custom titles for facets
+
   jit_pos <- position_jitter(width = 0.2, height = 0, seed = 42)
-  
+
   # Plot individual points for samples/donors
   p <- p + geom_point(position = jit_pos, shape = 16, size = 3)
 
   # Display labels if required
   if (labels_display) {
     if (labels_repel) {
-      p <- p + ggrepel::geom_text_repel(aes(label = .data$sample_id), 
-                                        min.segment.length = 0, position = jit_pos)
+      p <- p + ggrepel::geom_text_repel(aes(label = .data$sample_id),
+        min.segment.length = 0, position = jit_pos
+      )
     } else {
       p <- p + geom_text(aes(label = .data$sample_id), hjust = -0.1, vjust = 0.1, position = jit_pos)
     }
   }
-  
+
   # Add a connected mean line across all groups
-  p <- p + stat_summary(fun = mean, geom = "line", aes(group = 1), 
-                        color = "grey80", linewidth = 0.8)
+  p <- p + stat_summary(
+    fun = mean, geom = "line", aes(group = 1),
+    color = "grey80", linewidth = 0.8
+  )
 
   y_label <- if (assay == "counts" & normalized) {
     "Normalized counts"
@@ -500,7 +495,7 @@ plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = 
   } else {
     assay
   }
-  
+
   if (transform) {
     p <- p + scale_y_log10(name = paste0(y_label, " (log10 scale)"))
   } else {
@@ -508,41 +503,36 @@ plot_gene_modified <- function (dds_list, gene, intgroup = "condition", assay = 
   }
 
   p <- p + labs(title = paste0(genesymbol, " - ", gene))
-  
+
   return(p)
 }
-
-
-
 ```
 
 ## Checking the gene pattern across doses
 
 ```{r}
-gene_plot<- plot_gene_modified(
-  dds= list(dds_t1, dds_t2),
+gene_plot <- plot_gene_modified(
+  dds = list(dds_t1, dds_t2),
   gene = c("ENSG00000164430"),
   intgroup = "Dose",
   annotation_obj = anno_df,
-  plot_titles = c("2h", "6h"))+ ggpt
+  plot_titles = c("2h", "6h")
+) + ggpt
 
 ggsave("CGAS.png", plot = gene_plot, width = 8, height = 5, dpi = 400)
-
-
 ```
 
 ## VennDiagram
 
 ```{r}
-
 # 2h post-irradiation
 
 list_DEGs_t1 <- list(
   "0.5Gy" = resuSet$t1_0.5Gy_vs_0Gy$tbl_res_DE$id,
-       "4Gy" = resuSet$t1_4Gy_vs_0Gy$tbl_res_DE$id,
-     "1Gy" = resuSet$t1_1Gy_vs_0Gy$tbl_res_DE$id, 
-     "2Gy" = resuSet$t1_2Gy_vs_0Gy$tbl_res_DE$id
- )
+  "4Gy" = resuSet$t1_4Gy_vs_0Gy$tbl_res_DE$id,
+  "1Gy" = resuSet$t1_1Gy_vs_0Gy$tbl_res_DE$id,
+  "2Gy" = resuSet$t1_2Gy_vs_0Gy$tbl_res_DE$id
+)
 
 
 venn.plot_2h <- venn.diagram(
@@ -555,7 +545,7 @@ venn.plot_2h <- venn.diagram(
   cat.col = c("dodgerblue", "darkorange1", "seagreen3", "orchid3"),
   cat.cex = 2,
   margin = 0.05,
-    cex= 2
+  cex = 2
 )
 
 ggsave("venn.plot_2h.png", plot = venn.plot_2h, width = 6, height = 4, dpi = 400)
@@ -567,10 +557,10 @@ grid::grid.draw(venn.plot_2h)
 
 list_DEGs_t2 <- list(
   "0.5Gy" = resuSet$t2_0.5Gy_vs_0Gy$tbl_res_DE$id,
-     "4Gy" = resuSet$t2_4Gy_vs_0Gy$tbl_res_DE$id,
-     "1Gy" = resuSet$t2_1Gy_vs_0Gy$tbl_res_DE$id, 
-     "2Gy" = resuSet$t2_2Gy_vs_0Gy$tbl_res_DE$id
- )
+  "4Gy" = resuSet$t2_4Gy_vs_0Gy$tbl_res_DE$id,
+  "1Gy" = resuSet$t2_1Gy_vs_0Gy$tbl_res_DE$id,
+  "2Gy" = resuSet$t2_2Gy_vs_0Gy$tbl_res_DE$id
+)
 
 
 venn.plot_6h <- venn.diagram(
@@ -583,19 +573,17 @@ venn.plot_6h <- venn.diagram(
   cat.col = c("dodgerblue", "darkorange1", "seagreen3", "orchid3"),
   cat.cex = 2,
   margin = 0.05,
-  cex= 2
+  cex = 2
 )
 
 ggsave("venn.plot_6h.png", plot = venn.plot_6h, width = 6, height = 4, dpi = 400)
 
 grid::grid.draw(venn.plot_6h)
-
 ```
 
 ## since we spotted time effect on non-irradiated samples, DEA to capture radiation-only late effect would be as such
 
 ```{r}
-
 design(dds) <- ~ Donors + Time_point + Dose + Time_point:Dose
 
 dds <- DESeq(dds)
@@ -694,88 +682,87 @@ res_shrink_0.5Gy_time2_vs_time1 <- lfcShrink(dds,
 summary(res_shrink_0.5Gy_time2_vs_time1)
 
 res_shrink_0.5Gy_time2_vs_time1 <- deresult_to_df(res_shrink_0.5Gy_time2_vs_time1, FDR = 0.05)
-
 ```
 
 # Novel radiosensitive genes
 ```{r}
-Novel_genes<- 
-c("ENSG00000198522",
-"ENSG00000122687",
-"ENSG00000123689",
-"ENSG00000145365",
-"ENSG00000160803",
-"ENSG00000141682",
-"ENSG00000120278",
-"ENSG00000228526",
-"ENSG00000157557",
-"ENSG00000105426",
-"ENSG00000102879",
-"ENSG00000172716",
-"ENSG00000249437",
-"ENSG00000167483",
-"ENSG00000197694",
-"ENSG00000068028",
-"ENSG00000160469",
-"ENSG00000101773",
-"ENSG00000172115",
-"ENSG00000065183",
-"ENSG00000149554",
-"ENSG00000119917",
-"ENSG00000277925",
-"ENSG00000185515",
-"ENSG00000099203",
-"ENSG00000234127",
-"ENSG00000106052",
-"ENSG00000173559",
-"ENSG00000172613",
-"ENSG00000035664",
-"ENSG00000204569",
-"ENSG00000160953",
-"ENSG00000163945",
-"ENSG00000197774")
-
+Novel_genes <-
+  c(
+    "ENSG00000198522",
+    "ENSG00000122687",
+    "ENSG00000123689",
+    "ENSG00000145365",
+    "ENSG00000160803",
+    "ENSG00000141682",
+    "ENSG00000120278",
+    "ENSG00000228526",
+    "ENSG00000157557",
+    "ENSG00000105426",
+    "ENSG00000102879",
+    "ENSG00000172716",
+    "ENSG00000249437",
+    "ENSG00000167483",
+    "ENSG00000197694",
+    "ENSG00000068028",
+    "ENSG00000160469",
+    "ENSG00000101773",
+    "ENSG00000172115",
+    "ENSG00000065183",
+    "ENSG00000149554",
+    "ENSG00000119917",
+    "ENSG00000277925",
+    "ENSG00000185515",
+    "ENSG00000099203",
+    "ENSG00000234127",
+    "ENSG00000106052",
+    "ENSG00000173559",
+    "ENSG00000172613",
+    "ENSG00000035664",
+    "ENSG00000204569",
+    "ENSG00000160953",
+    "ENSG00000163945",
+    "ENSG00000197774"
+  )
 ```
 
 # Estimation Novel genes correlation-- Meta-analysis of within-donor Pearson correlations
 
 ```{r}
-
-
 get_cor_test_exp <- function(x) {
-    pc <- cor(x$Dose_numeric, x$exp_value, method = "spearman")
-    n  <- nrow(x)
-    c(cor=pc, n=n)
+  pc <- cor(x$Dose_numeric, x$exp_value, method = "spearman")
+  n <- nrow(x)
+  c(cor = pc, n = n)
 }
 
 
 
 res_metacors <- lapply(Novel_genes, function(g) {
   # mosdef::gene_plot(dds_t2, gene = g, intgroup = "Dose")
-  
+
   df_exp <- mosdef::gene_plot(dds_t2, g, intgroup = c("Dose", "Donors"), return_data = TRUE)
-  
+
   df_exp
-  
+
   df_exp$Dose_numeric <- as.numeric(gsub("Gy", "", df_exp$Dose))
-  
-  cor.test(~ Dose_numeric + exp_value, data=df_exp)
-  cor.test(~ Dose_numeric + exp_value, data=df_exp, method = "pearson")
-  
+
+  cor.test(~ Dose_numeric + exp_value, data = df_exp)
+  cor.test(~ Dose_numeric + exp_value, data = df_exp, method = "pearson")
+
   ### Average within-donor Pearson correlation
-  
+
   dexp_split <- split(df_exp, df_exp$Donors)
   correxp_ID <- vapply(dexp_split, function(x) {
-    cor(x$Dose_numeric, x$exp_value, method = "pearson") }, numeric(1))
-  
+    cor(x$Dose_numeric, x$exp_value, method = "pearson")
+  }, numeric(1))
+
   mean(correxp_ID)
-  
+
   ### Meta-analysis of within-donor Pearson correlations
-  
+
   d_correxp_ID <- data.frame(t(vapply(dexp_split, get_cor_test_exp, numeric(2)))) %>%
-    tibble::rownames_to_column(var="ID")
-  
-  mc <- metacor(cor=cor, n=n, data=d_correxp_ID, common=TRUE, random=FALSE)
+    tibble::rownames_to_column(var = "ID")
+
+  mc <- metacor(cor = cor, n = n, data = d_correxp_ID, common = TRUE, random = FALSE)
 
   return(mc)
 })
@@ -785,7 +772,6 @@ names(res_metacors) <- Novel_genes
 # Example
 
 res_metacors$ENSG00000198522
-
 ```
 
 
@@ -818,20 +804,18 @@ for (i in names(resuSet)) {
     )
   }
 }
-
 ```
 
 ## CGAS pathway- KEGG
 
 ```{r}
+entrez_t1_4Gy_vs_0Gy <- bitr(resuSet$t1_4Gy_vs_0Gy$tbl_res_DE$gene_name,
+  fromType = "SYMBOL",
+  toType = "ENTREZID", OrgDb = org.Hs.eg.db
+)$ENTREZID
 
-entrez_t1_4Gy_vs_0Gy <-bitr(resuSet$t1_4Gy_vs_0Gy$tbl_res_DE$gene_name, 
-     fromType = "SYMBOL",
-     toType = "ENTREZID", OrgDb = org.Hs.eg.db)$ENTREZID
 
-
-pathview(gene.data =entrez_t1_4Gy_vs_0Gy,pathway.id = "hsa04623",species = "hsa", res = 500)
-
+pathview(gene.data = entrez_t1_4Gy_vs_0Gy, pathway.id = "hsa04623", species = "hsa", res = 500)
 ```
 
 # Exporting the data
@@ -928,7 +912,6 @@ gtl_0Gy <- GeneTonicList(
   res_enrich = shake_enrichResult(resuSet$t2_vs_t1_0Gy$clupro_tbl),
   annotation_obj = anno_df
 )
-
 ```
 
 ## Running GeneTonic
@@ -940,43 +923,41 @@ GeneTonic(gtl = gtl_t1_0.5Gy)
 ### GeneTonic example plots
 
 ```{r}
+shake_res_enrich_t1_0.5 <- shake_enrichResult(resuSet$t1_0.5Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t1_0.5<- shake_enrichResult(resuSet$t1_0.5Gy_vs_0Gy$clupro_tbl)
+shake_res_enrich_t1_0.5 <- get_aggrscores(shake_res_enrich_t1_0.5, resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
-shake_res_enrich_t1_0.5<- get_aggrscores(shake_res_enrich_t1_0.5, resuSet$t1_0.5Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
+shake_res_enrich_t1_1 <- shake_enrichResult(resuSet$t1_1Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t1_1<- shake_enrichResult(resuSet$t1_1Gy_vs_0Gy$clupro_tbl)
+shake_res_enrich_t1_1 <- get_aggrscores(shake_res_enrich_t1_1, resuSet$t1_1Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
-shake_res_enrich_t1_1<- get_aggrscores(shake_res_enrich_t1_1, resuSet$t1_1Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
+shake_res_enrich_t1_2 <- shake_enrichResult(resuSet$t1_2Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t1_2<- shake_enrichResult(resuSet$t1_2Gy_vs_0Gy$clupro_tbl)
+shake_res_enrich_t1_2 <- get_aggrscores(shake_res_enrich_t1_2, resuSet$t1_2Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
-shake_res_enrich_t1_2<- get_aggrscores(shake_res_enrich_t1_2, resuSet$t1_2Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
+shake_res_enrich_t1_4 <- shake_enrichResult(resuSet$t1_4Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t1_4<- shake_enrichResult(resuSet$t1_4Gy_vs_0Gy$clupro_tbl)
+shake_res_enrich_t1_4 <- get_aggrscores(shake_res_enrich_t1_4, resuSet$t1_4Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
-shake_res_enrich_t1_4<- get_aggrscores(shake_res_enrich_t1_4, resuSet$t1_4Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
+shake_res_enrich_t2_0.5 <- shake_enrichResult(resuSet$t2_0.5Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t2_0.5<- shake_enrichResult(resuSet$t2_0.5Gy_vs_0Gy$clupro_tbl)
+shake_res_enrich_t2_0.5 <- get_aggrscores(shake_res_enrich_t2_0.5, resuSet$t2_0.5Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
-shake_res_enrich_t2_0.5<- get_aggrscores(shake_res_enrich_t2_0.5, resuSet$t2_0.5Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
+shake_res_enrich_t2_1 <- shake_enrichResult(resuSet$t2_1Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t2_1<- shake_enrichResult(resuSet$t2_1Gy_vs_0Gy$clupro_tbl)
+shake_res_enrich_t2_1 <- get_aggrscores(shake_res_enrich_t2_1, resuSet$t2_1Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
-shake_res_enrich_t2_1<- get_aggrscores(shake_res_enrich_t2_1, resuSet$t2_1Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
+shake_res_enrich_t2_2 <- shake_enrichResult(resuSet$t2_2Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t2_2<- shake_enrichResult(resuSet$t2_2Gy_vs_0Gy$clupro_tbl)
+shake_res_enrich_t2_2 <- get_aggrscores(shake_res_enrich_t2_2, resuSet$t2_2Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
-shake_res_enrich_t2_2<- get_aggrscores(shake_res_enrich_t2_2, resuSet$t2_2Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
+shake_res_enrich_t2_4 <- shake_enrichResult(resuSet$t2_4Gy_vs_0Gy$clupro_tbl)
 
-shake_res_enrich_t2_4<- shake_enrichResult(resuSet$t2_4Gy_vs_0Gy$clupro_tbl)
-
-shake_res_enrich_t2_4<- get_aggrscores(shake_res_enrich_t2_4, resuSet$t2_4Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
-
+shake_res_enrich_t2_4 <- get_aggrscores(shake_res_enrich_t2_4, resuSet$t2_4Gy_vs_0Gy$res_DESeq, annotation_obj = anno_df)
 
 
-gs_summary_overview_pair(shake_res_enrich_t1_4,shake_res_enrich_t2_4, n_gs = 25, color_by = "z_score")
 
+gs_summary_overview_pair(shake_res_enrich_t1_4, shake_res_enrich_t2_4, n_gs = 25, color_by = "z_score")
 ```
 
 
@@ -986,7 +967,8 @@ gs_summary_overview_pair(shake_res_enrich_t1_4,shake_res_enrich_t2_4, n_gs = 25,
 gs_heatmap(
   se = vsd_corrected_ordred,
   gtl = gtl_t2_0.5Gy,
-  geneset_id = "GO:0008630", anno_col_info = c("Dose", "Sex", "Time_point"), cluster_columns = FALSE, scale_row = T, column_labels = rep(c(1,2,3),10), column_names_rot = 360,  plot_title = "Signature heatmap\nIntrinsic apoptotic signaling pathway in response to DNA damage - GO:0008630")
+  geneset_id = "GO:0008630", anno_col_info = c("Dose", "Sex", "Time_point"), cluster_columns = FALSE, scale_row = T, column_labels = rep(c(1, 2, 3), 10), column_names_rot = 360, plot_title = "Signature heatmap\nIntrinsic apoptotic signaling pathway in response to DNA damage - GO:0008630"
+)
 
 
 # GeneTonic Geneset Heatmap t1_0.5Gy_vs_0Gy
@@ -1002,15 +984,14 @@ anno_full <- as.data.frame(colData(vsd_corrected_ordred)[, c("Sex", "Time_point"
 
 scored_mat_t2_0.5Gy_vs_0Gy <- GeneTonic::gs_scores(se = vsd_t2_corrected, gtl = gtl_t2_0.5Gy)
 
+#column annotations colors
+
+dose_colors <- colorRampPalette(c("lightyellow", "gold", "orange", "red"))(5)
+names(dose_colors)<- c("0Gy", "0.5Gy", "1Gy", "2Gy", "4Gy")
+
 anno_colors <- list(
-  Sex = c(Female = "pink", Male = "lightblue"),
-  Dose = c(
-    "0Gy" = "green", 
-    "0.5Gy" = "orange", 
-    "1Gy" = "purple", 
-    "2Gy" = "blue", 
-    "4Gy" = "red"
-  )
+  Sex = c(Female = "pink", Male = "blue"),
+  Dose = dose_colors
 )
 
 
@@ -1018,58 +999,59 @@ column_annotation <- HeatmapAnnotation(
   Sex = anno_t1$Sex,
   Dose = anno_t1$Dose,
   #Time = anno_t1$Time_point,
-  col = anno_colors, show_legend = TRUE
+  col = anno_colors, show_legend = T
 )
 
+col_fun <- colorRamp2(
+  c(-2, 0, 2), 
+  c("blue", "white", "red")
+)
 
-ht<-Heatmap(scored_mat_t2_0.5Gy_vs_0Gy[1:15,],
+ht <- Heatmap(scored_mat_t2_0.5Gy_vs_0Gy[1:15, ],
   name = "Expression",
-  #top_annotation = column_annotation,
+  # top_annotation = column_annotation,
   cluster_columns = F, # Optional: Cluster columns
   cluster_rows = F, # Optional: Cluster rows
   show_row_names = TRUE,
-  show_column_names = TRUE, 
+  show_column_names = TRUE,
   row_dend_side = "left",
   row_names_side = "right",
   row_names_gp = gpar(fontsize = 6.5),
   width = unit(7, "cm"),
   heatmap_height = unit(10.5, "cm"),
-  column_names_gp = gpar(fontsize = 7), 
-  column_labels = rep(c(1,2,3),5),
+  column_names_gp = gpar(fontsize = 7),
+  column_labels = rep(c(1, 2, 3), 5),
   column_names_rot = 360,
-  column_title = "Donors", 
+  column_title = "Donors",
   column_title_side = "bottom",
   show_heatmap_legend = T
 )
 
 
-draw(ht,  heatmap_legend_side = "right" )
+draw(ht, heatmap_legend_side = "right")
 
 # OR
 
 GeneTonic::gs_scoresheat(scored_mat_t1_1Gy_vs_0Gy, n_gs = 15, cluster_cols = FALSE)
-
 ```
 
 ## GeneTonic enrich map
 
 ```{r}
-
-
 res_enrich <- get_aggrscores(shake_res_enrich_t2_4, resuSet$t2_4Gy_vs_0Gy$res_DESeq, anno_df)
 
 emap_graph <- enrichment_map(
-res_enrich = res_enrich,
-res_de = resuSet$t2_4Gy_vs_0Gy$res_DESeq,
-annotation_obj = anno_df,
-n_gs = 15,
-overlap_threshold = 0.1,
-scale_edges_width = 200,
-color_by = "p.adjust"
+  res_enrich = res_enrich,
+  res_de = resuSet$t2_4Gy_vs_0Gy$res_DESeq,
+  annotation_obj = anno_df,
+  n_gs = 15,
+  overlap_threshold = 0.1,
+  scale_edges_width = 200,
+  color_by = "p.adjust"
 )
 
 
-graph <-visNetwork::visIgraph(emap_graph) %>%
+graph <- visNetwork::visIgraph(emap_graph) %>%
   visOptions(
     highlightNearest = list(
       enabled = TRUE,
@@ -1082,8 +1064,9 @@ graph <-visNetwork::visIgraph(emap_graph) %>%
     name = "emap_network",
     type = "png",
     label = "Save enrichment map"
-  
   )
+
+graph 
 
 saveWidget(graph, "emap_graph.html")
 
@@ -1091,16 +1074,13 @@ library(webshot)
 
 # Save as PNG with 400 DPI
 webshot("emap_graph.html", "emap_graph.png", zoom = 2)
-
 ```
 
 ## GeneTonic Gene-Geneset plot
 ```{r}
-
-ggs_obj <- GeneTonic::ggs_graph(gtl = gtl_t1_1Gy, prettify = T,n_gs = 15)
+ggs_obj <- GeneTonic::ggs_graph(gtl = gtl_t1_1Gy, prettify = T, n_gs = 15)
 
 visNetwork::visIgraph(ggs_obj)
-
 ```
 
 ## GSEA
@@ -1108,7 +1088,7 @@ visNetwork::visIgraph(ggs_obj)
 ```{r}
 ## background genes
 
-background_genes <- resuSet$t2_vs_t1_0Gy$res_DESeq%>%
+background_genes <- resuSet$t2_vs_t1_0Gy$res_DESeq %>%
   as.data.frame() %>%
   filter(baseMean != 0) %>%
   tibble::rownames_to_column(var = "gene") %>%
@@ -1170,14 +1150,11 @@ p2 <- gseaplot(em2,
 p1 / p2
 
 ggsave("GSEA.png", plot = p1 / p2, width = 7, height = 6, dpi = 400)
-
-
 ```
 
 # Gene Set Variation Analysis
 
 ```{r}
-
 exprs_mat <- assay(vsd_phybion)
 
 genes_exprs_mat <- rownames(exprs_mat)
@@ -1192,7 +1169,7 @@ genes_exprs_mat <- mapIds(
 
 rownames(exprs_mat) <- genes_exprs_mat
 
-goannot <- select(org.Hs.eg.db, keys = keys(org.Hs.eg.db, "SYMBOL"), columns = "GOALL", keytype = "SYMBOL")
+goannot <- AnnotationDbi::select(org.Hs.eg.db, keys = keys(org.Hs.eg.db, "SYMBOL"), columns = "GOALL", keytype = "SYMBOL")
 
 genesbygo <- split(goannot$SYMBOL, goannot$GO)
 
@@ -1220,7 +1197,7 @@ corfit <- duplicateCorrelation(esmicro, design, block = patient)
 
 fit <- lmFit(esmicro, design, block = patient, correlation = corfit$consensus)
 
-contrast.matrix <- makeContrasts((f4Gy_6hrs-f0Gy_6hrs)-(f4Gy_2hrs-f0Gy_2hrs), levels = design)
+contrast.matrix <- makeContrasts((f4Gy_6hrs - f0Gy_6hrs) - (f4Gy_2hrs - f0Gy_2hrs), levels = design)
 
 fit2 <- contrasts.fit(fit, contrast.matrix)
 
@@ -1231,7 +1208,6 @@ results_gsva <- topTable(fit2, coef = 1, number = nrow(esmicro), adjust = "BH")
 results_f_gsva <- decideTests(fit2, p.value = 0.05)
 
 summary(results_f_gsva)
-
 ```
 
 # DecoupleR-- Transcription Factors activity inference
@@ -1418,7 +1394,6 @@ res_t1_4Gy_vs_0Gy <- res_t1_4Gy_vs_0Gy %>%
 
 ## Time point 2
 ```{r}
-
 # 0Gy 6h Vs 2h
 
 res_0Gy_t2_vs_t1 <- resuSet$t2_vs_t1_0Gy$res_DESeq
@@ -1515,7 +1490,6 @@ res_t2_4Gy_vs_0Gy <- res_t2_4Gy_vs_0Gy %>%
 ## Performing the analysis
 
 ```{r}
-
 net <- get_collectri(organism = "human", split_complexes = FALSE)
 
 
@@ -1615,7 +1589,6 @@ sample_acts_t2_4Gy <- run_ulm(
 )
 
 sig_sample_acts_t2_4Gy <- sample_acts_t2_4Gy[sample_acts_t2_4Gy$p_value <= 0.05, ]
-
 ```
 
 ## Filter top TFs in both signs
@@ -1671,9 +1644,9 @@ f_sample_acts_t1_0.5Gy <- sample_acts_t1_0.5Gy %>%
 
 msk <- f_sample_acts_t1_0.5Gy$score > 0
 
-f_sample_acts_t1_0.5Gy[msk, 'rnk'] <- rank(-f_sample_acts_t1_0.5Gy[msk, 'score'])
+f_sample_acts_t1_0.5Gy[msk, "rnk"] <- rank(-f_sample_acts_t1_0.5Gy[msk, "score"])
 
-f_sample_acts_t1_0.5Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t1_0.5Gy[!msk, 'score']))
+f_sample_acts_t1_0.5Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t1_0.5Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t1_0.5Gy %>%
   arrange(rnk) %>%
@@ -1683,16 +1656,16 @@ tfs <- f_sample_acts_t1_0.5Gy %>%
 f_sample_acts_t1_0.5Gy <- f_sample_acts_t1_0.5Gy %>%
   filter(source %in% tfs)
 
-#t1_1Gy
+# t1_1Gy
 
 f_sample_acts_t1_1Gy <- sample_acts_t1_1Gy %>%
   mutate(rnk = NA)
 
 msk <- f_sample_acts_t1_1Gy$score > 0
 
-f_sample_acts_t1_1Gy[msk, 'rnk'] <- rank(-f_sample_acts_t1_1Gy[msk, 'score'])
+f_sample_acts_t1_1Gy[msk, "rnk"] <- rank(-f_sample_acts_t1_1Gy[msk, "score"])
 
-f_sample_acts_t1_1Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t1_1Gy[!msk, 'score']))
+f_sample_acts_t1_1Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t1_1Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t1_1Gy %>%
   arrange(rnk) %>%
@@ -1702,16 +1675,16 @@ tfs <- f_sample_acts_t1_1Gy %>%
 f_sample_acts_t1_1Gy <- f_sample_acts_t1_1Gy %>%
   filter(source %in% tfs)
 
-#t1_2Gy
+# t1_2Gy
 
 f_sample_acts_t1_2Gy <- sample_acts_t1_2Gy %>%
   mutate(rnk = NA)
 
 msk <- f_sample_acts_t1_2Gy$score > 0
 
-f_sample_acts_t1_2Gy[msk, 'rnk'] <- rank(-f_sample_acts_t1_2Gy[msk, 'score'])
+f_sample_acts_t1_2Gy[msk, "rnk"] <- rank(-f_sample_acts_t1_2Gy[msk, "score"])
 
-f_sample_acts_t1_2Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t1_2Gy[!msk, 'score']))
+f_sample_acts_t1_2Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t1_2Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t1_2Gy %>%
   arrange(rnk) %>%
@@ -1721,16 +1694,16 @@ tfs <- f_sample_acts_t1_2Gy %>%
 f_sample_acts_t1_2Gy <- f_sample_acts_t1_2Gy %>%
   filter(source %in% tfs)
 
-#t1_4Gy
+# t1_4Gy
 
 f_sample_acts_t1_4Gy <- sample_acts_t1_4Gy %>%
   mutate(rnk = NA)
 
 msk <- f_sample_acts_t1_4Gy$score > 0
 
-f_sample_acts_t1_4Gy[msk, 'rnk'] <- rank(-f_sample_acts_t1_4Gy[msk, 'score'])
+f_sample_acts_t1_4Gy[msk, "rnk"] <- rank(-f_sample_acts_t1_4Gy[msk, "score"])
 
-f_sample_acts_t1_4Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t1_4Gy[!msk, 'score']))
+f_sample_acts_t1_4Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t1_4Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t1_4Gy %>%
   arrange(rnk) %>%
@@ -1740,16 +1713,16 @@ tfs <- f_sample_acts_t1_4Gy %>%
 f_sample_acts_t1_4Gy <- f_sample_acts_t1_4Gy %>%
   filter(source %in% tfs)
 
-#t2_0.5
+# t2_0.5
 
 f_sample_acts_t2_0.5Gy <- sample_acts_t2_0.5Gy %>%
   mutate(rnk = NA)
 
 msk <- f_sample_acts_t2_0.5Gy$score > 0
 
-f_sample_acts_t2_0.5Gy[msk, 'rnk'] <- rank(-f_sample_acts_t2_0.5Gy[msk, 'score'])
+f_sample_acts_t2_0.5Gy[msk, "rnk"] <- rank(-f_sample_acts_t2_0.5Gy[msk, "score"])
 
-f_sample_acts_t2_0.5Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t2_0.5Gy[!msk, 'score']))
+f_sample_acts_t2_0.5Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t2_0.5Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t2_0.5Gy %>%
   arrange(rnk) %>%
@@ -1759,16 +1732,16 @@ tfs <- f_sample_acts_t2_0.5Gy %>%
 f_sample_acts_t2_0.5Gy <- f_sample_acts_t2_0.5Gy %>%
   filter(source %in% tfs)
 
-#t2_1Gy
+# t2_1Gy
 
 f_sample_acts_t2_1Gy <- sample_acts_t2_1Gy %>%
   mutate(rnk = NA)
 
 msk <- f_sample_acts_t2_1Gy$score > 0
 
-f_sample_acts_t2_1Gy[msk, 'rnk'] <- rank(-f_sample_acts_t2_1Gy[msk, 'score'])
+f_sample_acts_t2_1Gy[msk, "rnk"] <- rank(-f_sample_acts_t2_1Gy[msk, "score"])
 
-f_sample_acts_t2_1Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t2_1Gy[!msk, 'score']))
+f_sample_acts_t2_1Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t2_1Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t2_1Gy %>%
   arrange(rnk) %>%
@@ -1778,16 +1751,16 @@ tfs <- f_sample_acts_t2_1Gy %>%
 f_sample_acts_t2_1Gy <- f_sample_acts_t2_1Gy %>%
   filter(source %in% tfs)
 
-#t2_2Gy
+# t2_2Gy
 
 f_sample_acts_t2_2Gy <- sample_acts_t2_2Gy %>%
   mutate(rnk = NA)
 
 msk <- f_sample_acts_t2_2Gy$score > 0
 
-f_sample_acts_t2_2Gy[msk, 'rnk'] <- rank(-f_sample_acts_t2_2Gy[msk, 'score'])
+f_sample_acts_t2_2Gy[msk, "rnk"] <- rank(-f_sample_acts_t2_2Gy[msk, "score"])
 
-f_sample_acts_t2_2Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t2_2Gy[!msk, 'score']))
+f_sample_acts_t2_2Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t2_2Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t2_2Gy %>%
   arrange(rnk) %>%
@@ -1797,16 +1770,16 @@ tfs <- f_sample_acts_t2_2Gy %>%
 f_sample_acts_t2_2Gy <- f_sample_acts_t2_2Gy %>%
   filter(source %in% tfs)
 
-#t2_4Gy
+# t2_4Gy
 
 f_sample_acts_t2_4Gy <- sample_acts_t2_4Gy %>%
   mutate(rnk = NA)
 
 msk <- f_sample_acts_t2_4Gy$score > 0
 
-f_sample_acts_t2_4Gy[msk, 'rnk'] <- rank(-f_sample_acts_t2_4Gy[msk, 'score'])
+f_sample_acts_t2_4Gy[msk, "rnk"] <- rank(-f_sample_acts_t2_4Gy[msk, "score"])
 
-f_sample_acts_t2_4Gy[!msk, 'rnk'] <- rank(-abs(f_sample_acts_t2_4Gy[!msk, 'score']))
+f_sample_acts_t2_4Gy[!msk, "rnk"] <- rank(-abs(f_sample_acts_t2_4Gy[!msk, "score"]))
 
 tfs <- f_sample_acts_t2_4Gy %>%
   arrange(rnk) %>%
@@ -1815,13 +1788,11 @@ tfs <- f_sample_acts_t2_4Gy %>%
 
 f_sample_acts_t2_4Gy <- f_sample_acts_t2_4Gy %>%
   filter(source %in% tfs)
-
 ```
 
 ## Decoupler heatmap
 
 ```{r}
-
 sample_acts <- run_ulm(
   mat = decoupler_counts,
   net = net,
@@ -1852,12 +1823,12 @@ sample_acts_mat <- sample_acts_mat[, tfs]
 # Scale per sample
 sample_acts_mat <- scale(sample_acts_mat)
 
-#transpose
-sample_acts_mat<- t(sample_acts_mat)
+# transpose
+sample_acts_mat <- t(sample_acts_mat)
 
-#order the samples
+# order the samples
 
-sample_acts_mat<- sample_acts_mat[, c(7,8,9,1,2,3,13,14,15,19,20,21,25,26,27,10,11,12,4,5,6,16,17,18,22,23,24,28,29,30)]
+sample_acts_mat <- sample_acts_mat[, c(7, 8, 9, 1, 2, 3, 13, 14, 15, 19, 20, 21, 25, 26, 27, 10, 11, 12, 4, 5, 6, 16, 17, 18, 22, 23, 24, 28, 29, 30)]
 
 # Choose color palette
 palette_length <- 100
@@ -1892,7 +1863,7 @@ column_annotation <- HeatmapAnnotation(
 )
 
 
-ht<- Heatmap(sample_acts_mat[1:25,],
+ht <- Heatmap(sample_acts_mat[1:25, ],
   name = "Expression",
   top_annotation = column_annotation,
   cluster_columns = F, # Optional: Cluster columns
@@ -1903,30 +1874,30 @@ ht<- Heatmap(sample_acts_mat[1:25,],
   row_names_gp = gpar(fontsize = 7),
   width = unit(9, "cm"),
   heatmap_height = unit(12, "cm"),
-  column_names_gp = gpar(fontsize = 6), 
-  column_labels = rep(c(1,2,3),10),
+  column_names_gp = gpar(fontsize = 6),
+  column_labels = rep(c(1, 2, 3), 10),
   column_names_rot = 360,
-  column_title = "Donors", 
+  column_title = "Donors",
   column_title_side = "bottom",
   show_heatmap_legend = TRUE
 )
 
 draw(ht)
-
 ```
 
 ## TFs network plot
 
 ```{r}
-
-snet <- net[net$source %in% c("DMAP1","E2F7" ,  "GFI1B",  "HMGB2",  "MYF6",   "SALL2",  "TGIF1",  "ZNF300", "ZNF76") ,]
-
-snet
-
-#table(net$source)
+snet <- net[net$source %in% c("DMAP1", "E2F7", "GFI1B", "HMGB2", "MYF6", "SALL2", "TGIF1", "ZNF300", "ZNF76"), ]
 
 snet
-snet %>% igraph::graph_from_data_frame() %>% visIgraph()
+
+# table(net$source)
+
+snet
+snet %>%
+  igraph::graph_from_data_frame() %>%
+  visIgraph()
 
 snet %>% igraph::graph_from_data_frame() -> myg
 
@@ -1936,7 +1907,7 @@ V(myg)$type <- "gene"
 
 V(myg)$name
 
-V(myg)$type[V(myg)$name %in% c("DMAP1","E2F7" ,  "GFI1B",  "HMGB2",  "MYF6",   "SALL2",  "TGIF1",  "ZNF300", "ZNF76" )] <- "tf"
+V(myg)$type[V(myg)$name %in% c("DMAP1", "E2F7", "GFI1B", "HMGB2", "MYF6", "SALL2", "TGIF1", "ZNF300", "ZNF76")] <- "tf"
 
 V(myg)$shape <- c("box", "ellipse")[factor(V(myg)$type, levels = c("tf", "gene"))]
 
@@ -1954,15 +1925,13 @@ E(myg)$color <- c("blue", "red")[factor(E(myg)$mor, levels = c(-1, 1))]
 visIgraph(myg)
 
 
-#snet %>% as.data.frame()
+# snet %>% as.data.frame()
 View(snet)
-
 ```
 
 #Deconvolution-- immune cells relative abundance
 
 ```{r}
-
 # QuantiseqR
 
 tpm_mat <- assay(dds, "abundance")
@@ -1996,7 +1965,7 @@ deconv_quantiseq <- quantiseqr::run_quantiseq(
 
 quantiplot(deconv_quantiseq)
 
-pheatmap(t(deconv_quantiseq[, -1]) - rowMeans(t(deconv_quantiseq[, -1])),cluster_cols = TRUE)
+pheatmap(t(deconv_quantiseq[, -1]) - rowMeans(t(deconv_quantiseq[, -1])), cluster_cols = TRUE)
 
 
 # immunedeconv with Abis method
@@ -2015,7 +1984,7 @@ res_abis_matrix <- apply(res_abis_matrix, 2, as.numeric)
 
 rownames(res_abis_matrix) <- rows_res_abis
 
-#pheatmap(res_abis_matrix_ordered - rowMeans(res_abis_matrix_ordered), cluster_cols = FALSE)
+# pheatmap(res_abis_matrix_ordered - rowMeans(res_abis_matrix_ordered), cluster_cols = FALSE)
 
 # Omnideconv
 
@@ -2023,9 +1992,9 @@ rownames(res_abis_matrix) <- rows_res_abis
 
 # prepare the single cell matrix
 
-#Convert("./TS_Blood.h5ad", "blood_new.h5seurat")
+# Convert("./TS_Blood.h5ad", "blood_new.h5seurat")
 
-seuratObject <- LoadH5Seurat("./blood_new.h5Seurat", assays= "counts")
+seuratObject <- LoadH5Seurat("./blood_new.h5Seurat", assays = "counts")
 
 is_outlier <- function(SeuratObject, metric, nmads) {
   eval(parse(text = paste0("M <- SeuratObject$", metric)))
@@ -2033,7 +2002,7 @@ is_outlier <- function(SeuratObject, metric, nmads) {
   return(outlier)
 }
 
-#Omnideconv
+# Omnideconv
 
 mito_genes <- grep("^MT-", rownames(seuratObject@assays$RNA@counts), value = TRUE)
 
@@ -2095,22 +2064,21 @@ saveRDS(Sc_count_matrix, "sc_blood_modified.rds")
 
 # running omnideconv-bayesprism
 
-#deconv_bayesprism <- omnideconv::deconvolute(
+# deconv_bayesprism <- omnideconv::deconvolute(
 #  bulk_gene_expression = dds_mat,
 #  single_cell_object = sc_blood_modified,
 #  cell_type_annotations = Blood_annotation_modified,
 #  method = "bayesprism",
 #  n_cores = 12
-#)
+# )
 
-#omnideconv::plot_deconvolution(list("bayesprism" = deconv_bayesprism), "bar", "method", "Spectral")
+# omnideconv::plot_deconvolution(list("bayesprism" = deconv_bayesprism), "bar", "method", "Spectral")
 
 column_annotation <- data.frame(Time_Point = time_point, Sex = sex, Dose = dose)
 
-pheatmap(t(deconv_bayesprism[, - c(3,4,6,8,9,10, 15, 16, 18,21,22)]), annotation_col = column_annotation, labels_col = rep(c(1,2,3), 10), display_numbers = TRUE, number_format = "%.2f", annotation_colors = anno_colors, angle_col = "0")
+pheatmap(t(deconv_bayesprism[, -c(3, 4, 6, 8, 9, 10, 15, 16, 18, 21, 22)]), annotation_col = column_annotation, labels_col = rep(c(1, 2, 3), 10), display_numbers = TRUE, number_format = "%.2f", annotation_colors = anno_colors, angle_col = "0")
 
 # CIBERSORTx (in web-based tool) was also performed
-
 ```
 
 # Session information
